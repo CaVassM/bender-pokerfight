@@ -25,6 +25,7 @@ con su fórmula y los descartes), y bot.py lo escribe en el registro.
 import random
 
 import cartas as C
+import explotacion as EXP
 import poblacion as POB
 import rangos as R
 from equity import estimar, t_max_de_reloj
@@ -73,7 +74,8 @@ class Capa1:
         self.p = params
         self.memoria = memoria                 # Capa 2: creencias por rival (None = rival promedio para todos)
         self._pis = {}
-        self.rng = rng or random.Random(params["capa1"]["semilla"])       # para el Monte Carlo
+        self._lect = {}                        # explotación: lectura de cada rival en la decisión actual
+        self.rng =rng or random.Random(params["capa1"]["semilla"])       # para el Monte Carlo
         self.rng_mezcla = random.Random(self.rng.random())                # aparte, para la mezcla de §1.11
         self.cache = POB.CacheCategorias()
         self._c_medio = {}
@@ -118,15 +120,26 @@ class Capa1:
     def _rangos_rivales(self, turno, mano, board):
         """Rango vivo de cada rival que sigue en la mano (modelo de población)."""
         muertas = C.mascara(mano + board)
+        self._pis, self._lect = {}, {}
         if not self.p["capa1"]["rangos_poblacion"]:
             return {r.id: R.rango_alazar(muertas) for r in turno.rivales}
         evs = POB.eventos(turno.estado.historial)
         pos = posiciones(turno.estado)
-        self._pis = {}
+        self._pis, self._lect = {}, {}
+        cfg = self.p["explotacion"]
         if self.memoria is not None:
             self._pis = {r.id: self.memoria.pi(r.id) for r in turno.rivales}      # §2.4: creencia por rival
+            if cfg["activa"]:                                                    # §3: ρ, tipo dominante, bot reconocido
+                self._lect = {r.id: EXP.lectura_de(self.memoria.rival(r.id), self.p, cfg["usar_stats"], cfg["contra_bots"])
+                              for r in turno.rivales}
+
+        def expl(i):
+            d = EXP.datos_para_rangos(self._lect.get(i))
+            if d is not None and not cfg["filtros_tipo"]:
+                d["tipo"] = None
+            return d
         return {r.id: POB.rango_de_rival(r.id, pos.get(r.id, ""), evs, board, mano, self.p, self.cache,
-                                         pi=self._pis.get(r.id))
+                                         pi=self._pis.get(r.id), expl=expl(r.id))
                 for r in turno.rivales}
 
     def _equity(self, mano, board, rangos, umbrales, mesa, t_max):
@@ -197,6 +210,8 @@ class Capa1:
                                       "pi": {t: round(v, 2) for t, v in pi.items()},
                                       "bot": riv.bot_reconocido(), "manos": riv.contadores["manos"],
                                       "vpip": round(riv.stats["vpip"].p, 2), "pfr": round(riv.stats["pfr"].p, 2)}
+                if i in self._lect:                           # explotación: ρ de cada estadística, tipo dominante y bot
+                    info["rivales"][i]["explotacion"] = self._lect[i].a_info()
         t_max = t_max_de_reloj(p["reloj"], mesa.manos_mesa, mesa.segundos_mesa)
         info["t_max"] = round(t_max, 3)
 
@@ -270,6 +285,14 @@ class Capa1:
                 if coste > turno.techo * d["compromiso_fraccion"]:
                     c["descartada"] = f"compromiso: cuesta {coste} > {d['compromiso_fraccion']:.2f} del stack ({turno.techo})"
 
+        # §3.4: ajustes por tipo (solo con certeza alta). No se farolea a station / maníaco / aleatorio.
+        if self._lect and p["explotacion"]["filtros_tipo"]:
+            motivo = EXP.sin_farol([self._lect[r.id] for r in rivales if r.id in self._lect])
+            if motivo:
+                for c in candidatos:
+                    if c["clase"] == "apuesta" and c["e_prima"] < d["umbral_valor"] and not c["descartada"]:
+                        c["descartada"] = motivo
+
         vivos = [c for c in candidatos if not c["descartada"]]
         if not vivos:                                   # nunca quedarse sin acción
             vivos = [c for c in candidatos if c["clase"] in ("fold", "check", "call")] or candidatos
@@ -306,9 +329,12 @@ class Capa1:
         if not board:
             return POB.c_de_rango_preflop(rango, x, ya, p["pob"])
         if rival.id not in self._c_medio:
-            plantilla = POB.plantilla_mezcla(self._pis.get(rival.id) or p["capa1"]["pi_defecto"], p)
+            lec = self._lect.get(rival.id)
+            plantilla = POB.plantilla_mezcla(self._pis.get(rival.id) or p["capa1"]["pi_defecto"], p, lec.bot if lec else None)
             self._c_medio[rival.id] = POB.c_sigue(rango, board, plantilla, self.cache)
-        return POB.c_de_rango_postflop(self._c_medio[rival.id], x, ya, p["pob"])
+        c = POB.c_de_rango_postflop(self._c_medio[rival.id], x, ya, p["pob"])
+        lec = self._lect.get(rival.id)
+        return EXP.c_mezclada(c, lec, x, p) if lec is not None else c           # §3.3: θ = (1−ρ)·θ_base + ρ·θ̂
 
     def _e_prima(self, mesa, mano, board, rangos, responden, cs, nombre, t_max, cache, info):
         """e' = equity si le pagan ESTA apuesta (§1.9), contra el rango de pago de quienes pagarían.

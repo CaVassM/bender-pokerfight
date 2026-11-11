@@ -41,9 +41,14 @@ def _fila(params, tipo):
     return params["plantillas"]["promedio" if tipo == "tag" else tipo]
 
 
-def plantilla_mezcla(pi, params):
+def plantilla_mezcla(pi, params, bot=None):
     """P(acción | categoría) mezclando los tipos con la creencia π (§2.4):
-    {categoría: (retira, paga, sube)}. Con pi={'tag': 1} es la fila 'Promedio'."""
+    {categoría: (retira, paga, sube)}. Con pi={'tag': 1} es la fila 'Promedio'.
+    Si el rival es un bot del kit RECONOCIDO (§2.7, `bot`), se usa su propia plantilla medida en lugar de
+    la mezcla (§2.4: "se usa su lógica en lugar de la mezcla")."""
+    pb = params.get("plantillas_bot", {})
+    if bot is not None and bot in pb:
+        return {cat: tuple(pb[bot][cat]) for cat in (R.FUERTE, R.MEDIA, R.PROYECTO, R.AIRE)}
     out = {}
     for cat in (R.FUERTE, R.MEDIA, R.PROYECTO, R.AIRE):
         v = [0.0, 0.0, 0.0]
@@ -55,10 +60,13 @@ def plantilla_mezcla(pi, params):
     return out
 
 
-def prob_apuesta(pi, params):
+def prob_apuesta(pi, params, bot=None):
     """P(apuesta | categoría) cuando nadie apostó (§2.2): fuerte .65, media .35,
     proyecto .45, aire .25 para el promedio; nit ×0,7, station ×0,6, maníaco ×1,5
-    (tope .95); aleatorio .50 en todo."""
+    (tope .95); aleatorio .50 en todo. Con un bot del kit reconocido, la suya medida."""
+    pab = params.get("prob_apuesta_bot", {})
+    if bot is not None and bot in pab:
+        return dict(pab[bot])
     pa = params["prob_apuesta"]
     por_tipo = pa.get("por_tipo", {})
     out = {}
@@ -217,21 +225,58 @@ def pct_de_posicion(posicion, params):
     return tabla.get(clave_posicion(posicion), params["capa1"]["pct_bb_sin_posicion"])
 
 
-def rango_preflop(n_subidas, n_pagos, posicion, params):
+def chen(combo):
+    """Puntuación de Chen de un combo: port exacto de puntuacionChen de bots/base/main.go (A=10, K=8, Q=7,
+    J=6, el resto la mitad de su rango; parejas ×2 con mínimo 5; +2 suited; −1/−2/−4/−5 por huecos; +1 si
+    son conectoras bajas)."""
+    ra, rb = sorted((C.rango_de(combo[0]), C.rango_de(combo[1])), reverse=True)
+    puntaje = {14: 10.0, 13: 8.0, 12: 7.0, 11: 6.0}.get(ra, ra / 2.0)
+    if ra == rb:
+        puntaje = max(puntaje * 2, 5.0)
+    if C.palo_de(combo[0]) == C.palo_de(combo[1]):
+        puntaje += 2
+    hueco = ra - rb - 1
+    puntaje -= 0 if hueco <= 0 else {1: 1, 2: 2, 3: 4}.get(hueco, 5)
+    if hueco <= 1 and ra < 12 and ra != rb:
+        puntaje += 1
+    return puntaje
+
+
+def rango_de_chen(minimo, maximo=None):
+    """Clases cuya puntuación de Chen está en [minimo, maximo). Es el rango EXACTO de `base` (§3.4):
+    sube con Chen >= 9 y paga con 5 <= Chen < 9."""
+    clases = [c for c in R.CLASES_169 if chen(R.combos_de_clase(c)[0]) >= minimo and (maximo is None or chen(R.combos_de_clase(c)[0]) < maximo)]
+    return R.rango_de_clases(clases)
+
+
+def rango_preflop(n_subidas, n_pagos, posicion, params, expl=None):
     """Rango inicial de un rival según lo que hizo preflop.
 
-      - subió: top % de población de su posición (§1.5, con ρ=0 en la Capa 1); cada
-        re-subida lo estrecha (`estrecha_por_subida`, con piso `min_pct_rango`);
+      - subió: top % de población de su posición (§1.5); cada re-subida lo estrecha (×0,45, §2.8);
       - solo pagó: w=1 para top(VPIP) sin top(PFR) y 0,3 para top(PFR) (§2.8);
       - no hizo nada voluntario (ciega que pasó, o aún no actuó): mano al azar.
+
+    `expl` (Capa 2/explotación, opcional) trae los p̂ medidos de VPIP y PFR del rival con su ρ (§3.2): los
+    anchos pasan a θ = (1 − ρ)·θ_base + ρ·p̂ (§3.3). Si el rival es `base` reconocido, su rango es el de
+    Chen (§3.4), exacto porque sale de su código.
     """
     c1 = params["capa1"]
     pct_pfr = pct_de_posicion(posicion, params)
+    vpip = 100.0 * params["beta"]["m"]["vpip"]
+    if expl is not None:
+        if expl.get("bot") == "base" and params["explotacion"].get("chen_base", True):
+            if n_subidas >= 1:
+                return rango_de_chen(9.0)
+            if n_pagos >= 1:
+                return rango_de_chen(5.0, 9.0)
+        p_pfr, rho_pfr = expl["pfr"]
+        p_vpip, rho_vpip = expl["vpip"]
+        pct_pfr = (1.0 - rho_pfr) * pct_pfr + rho_pfr * 100.0 * p_pfr
+        vpip = (1.0 - rho_vpip) * vpip + rho_vpip * 100.0 * p_vpip
     if n_subidas >= 1:
         pct = max(c1["min_pct_rango"], pct_pfr * (c1["estrecha_por_subida"] ** (n_subidas - 1)))
         return R.rango_top(pct)
     if n_pagos >= 1:
-        vpip = 100.0 * params["beta"]["m"]["vpip"]
         top_pfr = set(R.clases_top(pct_pfr))
         pesos = {}
         for clase in R.clases_top(max(vpip, pct_pfr)):
@@ -292,18 +337,22 @@ def tabla_de_accion(tipo, enfrentaba, plantilla, pa):
     return None
 
 
-def rango_de_rival(rival_id, posicion, eventos_todos, board, mano_bender, params, cache, pi=None):
+def rango_de_rival(rival_id, posicion, eventos_todos, board, mano_bender, params, cache, pi=None, expl=None):
     """Rango vivo de un rival en la mano actual: preflop según lo que hizo y, calle
-    por calle, reajustado con sus acciones (§2.1) y sin los combos bloqueados."""
+    por calle, reajustado con sus acciones (§2.1) y sin los combos bloqueados.
+    `expl`: lectura de explotación (ρ, bot reconocido, tipo dominante); ver rango_preflop."""
     pi = pi or params["capa1"]["pi_defecto"]
-    plantilla = plantilla_mezcla(pi, params)
-    pa = prob_apuesta(pi, params)
+    bot = expl.get("bot") if expl else None
+    plantilla = plantilla_mezcla(pi, params, bot)
+    pa = prob_apuesta(pi, params, bot)
     piso = params["rango"]["piso"]
+    # §3.4 aleatorio: "no darle crédito a sus subidas" -> sus subidas no estrechan el rango
+    sin_credito = bool(expl and expl.get("tipo") == "aleatorio")
 
     propios = [e for e in eventos_todos if e[0] == rival_id]
     n_sub = sum(1 for e in propios if e[1] == "preflop" and e[2] in APUESTAS)
     n_pag = sum(1 for e in propios if e[1] == "preflop" and e[2] == "call")
-    r = rango_preflop(n_sub, n_pag, posicion, params)
+    r = rango_preflop(n_sub, n_pag, posicion, params, expl)
 
     for calle in ("flop", "turn", "river"):
         n = CARTAS_DE_CALLE[calle]
@@ -313,6 +362,8 @@ def rango_de_rival(rival_id, posicion, eventos_todos, board, mano_bender, params
         r = r.filtrar(C.mascara(list(mano_bender) + list(board_calle)))
         for _, etapa, tipo, enfrentaba in propios:
             if etapa != calle:
+                continue
+            if sin_credito and enfrentaba and tipo in ("raise", "allin", "bet"):
                 continue
             tabla = tabla_de_accion(tipo, enfrentaba, plantilla, pa)
             if tabla is not None and not r.vacio():

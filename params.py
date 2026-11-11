@@ -80,6 +80,25 @@ PARAMS = {
         "tope": 0.95,
         "aleatorio": 0.50,
     },
+    # Plantillas POR BOT del kit (contraestrategia §3.4: se usan cuando la huella reconoce al bot, >= 0,9).
+    # Calibradas con el mismo historial (calibrar_plantillas.py, sección "POR BOT"): shrinkage s=20 hacia la plantilla
+    # calibrada de su grupo (TAG o station); aleatorio, hacia 1/3 y 0,5. novato y darwin (reserva) no están.
+    "plantillas_bot": {
+        "aleatorio": {"fuerte": [0.195, 0.307, 0.497], "media": [0.278, 0.272, 0.449], "proyecto": [0.287, 0.241, 0.472], "aire": [0.246, 0.277, 0.478]},
+        "conservador": {"fuerte": [0.572, 0.428, 0.0], "media": [0.574, 0.426, 0.0], "proyecto": [0.581, 0.419, 0.0], "aire": [0.564, 0.436, 0.0]},
+        "base": {"fuerte": [0.336, 0.461, 0.203], "media": [0.399, 0.596, 0.005], "proyecto": [0.846, 0.149, 0.005], "aire": [0.816, 0.176, 0.008]},
+        "estadistico": {"fuerte": [0.022, 0.359, 0.619], "media": [0.119, 0.706, 0.175], "proyecto": [0.376, 0.619, 0.005], "aire": [0.621, 0.379, 0.0]},
+        "bandido": {"fuerte": [0.148, 0.633, 0.22], "media": [0.462, 0.534, 0.005], "proyecto": [0.869, 0.127, 0.004], "aire": [0.985, 0.014, 0.0]},
+        "espia": {"fuerte": [0.018, 0.541, 0.441], "media": [0.14, 0.854, 0.006], "proyecto": [0.253, 0.742, 0.005], "aire": [0.621, 0.379, 0.0]},
+    },
+    "prob_apuesta_bot": {
+        "aleatorio": {"fuerte": 0.697, "media": 0.693, "proyecto": 0.707, "aire": 0.664},
+        "conservador": {"fuerte": 0.001, "media": 0.0, "proyecto": 0.003, "aire": 0.0},
+        "base": {"fuerte": 0.996, "media": 0.984, "proyecto": 0.2, "aire": 0.362},
+        "estadistico": {"fuerte": 0.931, "media": 0.331, "proyecto": 0.186, "aire": 0.041},
+        "bandido": {"fuerte": 0.714, "media": 0.241, "proyecto": 0.171, "aire": 0.17},
+        "espia": {"fuerte": 0.927, "media": 0.45, "proyecto": 0.293, "aire": 0.17},
+    },
     # --- §2.3 Tipos de rival ------------------------------------------------------
     "tipos": ["nit", "tag", "station", "maniaco", "aleatorio"],
     # CALIBRADO con los 6 bots de entrenamiento del kit (pruebas/calibrar.py sobre calib-1: 90 mesas, 100 manos):
@@ -134,7 +153,15 @@ PARAMS = {
     # --- §2.8 Rango preflop inicial -----------------------------------------------
     "preflop_rango": {"peso_top_pfr_si_paga": 0.3},
     # --- §3 Explotación -----------------------------------------------------------
-    "explotacion": {"kappa": 1.0, "rho_max": 0.8, "n_min": 8, "tau": 0.7},
+    "explotacion": {
+        "kappa": 1.0, "rho_max": 0.8, "n_min": 8, "tau": 0.7,     # §3.2 y §3.4 (valores del .tex)
+        # Interruptores para medir cada pieza por separado (paso 5):
+        "activa": True,          # False = solo Capa 2 ("sin explotación": ρ=0, sin filtros, sin bots)
+        "usar_stats": True,      # §3.2-§3.3: mezclar c_i y el ancho del rango preflop con lo medido (ρ)
+        "filtros_tipo": True,    # §3.4: no farolear a station / maníaco / aleatorio (π_t >= τ)
+        "contra_bots": True,     # §3.4: plantilla propia del bot del kit reconocido (huella >= 0,9)
+        "chen_base": True,       # §3.4: rango preflop exacto de `base` (puntuación de Chen) cuando se lo reconoce
+    },
     # --- Solo pruebas -------------------------------------------------------------
     "debug": {"retardo_s": 0.0},   # pausa artificial por decisión (para poder matar a Bender a mitad de mesa)
     # --- Capa 1: opciones que el .tex no fija (extensiones propias) -----------------
