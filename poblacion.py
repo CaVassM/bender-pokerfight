@@ -48,6 +48,12 @@ def calibracion_activa(params, profundo):
     return bool(cal.get("activa")) and bool(profundo)
 
 
+def componente(params, nombre):
+    """Cada pieza de la calibración se puede apagar por separado (calibracion_allin.componentes): paga_pre, paga_post,
+    empuja_pre, empuja_post. Por defecto todas encendidas."""
+    return bool((params["calibracion_allin"].get("componentes") or {}).get(nombre, True))
+
+
 def fuentes_calibracion(params, bot, pi):
     """[(peso, datos)]: un bot del kit RECONOCIDO usa sus propios datos; si no, los grupos de tipo con datos, ponderados
     por la creencia π (lo que π reparte entre tipos sin datos —nit, maníaco— no se calibra: se queda en lo actual)."""
@@ -75,6 +81,8 @@ def c_calibrada(c0, es_preflop, bot, pi, params):
     """P(el rival paga un all-in) calibrada: `c0` es lo que da el modelo (§1.7/§3.3) y se encoge hacia lo medido."""
     cal = params["calibracion_allin"]
     clave = "pre" if es_preflop else "post"
+    if not componente(params, "paga_" + clave):
+        return c0
     fuentes = [(w, f["paga"][clave][0], f["paga"][clave][1]) for w, f in fuentes_calibracion(params, bot, pi)]
     return min(0.98, max(0.0, mezcla_con_prior(c0, fuentes, cal["s"])))
 
@@ -83,6 +91,8 @@ def corte_empuje_preflop(bot, pi, params):
     """Top-% de manos (de 100) al que se recorta el rango preflop de quien hizo all-in: el que contiene el 90 % de los
     all-in medidos de ese bot/tipo, con shrinkage hacia 100 (= sin recorte, lo actual). 100 si no hay datos."""
     cal = params["calibracion_allin"]
+    if not componente(params, "empuja_pre"):
+        return 100.0
     cubierto, t = 0.0, 0.0
     for w, f in fuentes_calibracion(params, bot, pi):
         e = f["empuja_pre"]
@@ -104,6 +114,8 @@ def recortar_a_top(rango, pct):
 def tabla_empuje_postflop(tabla0, enfrentaba, bot, pi, params):
     """P(all-in | categoría) calibrada para el reajuste de §2.1: cada celda se encoge hacia la de `tabla0`."""
     cal = params["calibracion_allin"]
+    if not componente(params, "empuja_post"):
+        return tabla0
     ctx = "faced" if enfrentaba else "libre"
     fuentes = fuentes_calibracion(params, bot, pi)
     out = {}

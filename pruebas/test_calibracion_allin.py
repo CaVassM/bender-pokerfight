@@ -64,6 +64,30 @@ def test_calibracion_activa_solo_con_el_interruptor_y_en_modo_profundo():
     assert not POB.calibracion_activa(p, True)
 
 
+def test_cada_componente_se_apaga_por_separado():
+    p = con_calibracion(bots={"bandido": datos(paga_pre=(1000, 0), paga_post=(1000, 0), emp_pre=(200, 2.0))})
+    assert POB.componente(p, "paga_post")                                                   # por defecto, todas encendidas
+    p["calibracion_allin"]["componentes"] = {"paga_post": False}
+    assert not POB.componente(p, "paga_post") and POB.componente(p, "paga_pre")
+    assert POB.c_calibrada(0.3, False, "bandido", {"tag": 1.0}, p) == pytest.approx(0.3)    # postflop apagado: lo del modelo
+    assert POB.c_calibrada(0.3, True, "bandido", {"tag": 1.0}, p) < 0.01                    # preflop sigue calibrado
+    p["calibracion_allin"]["componentes"] = {"empuja_pre": False, "empuja_post": False}
+    assert POB.corte_empuje_preflop("bandido", {"tag": 1.0}, p) == 100.0
+    tabla0 = {R.FUERTE: 0.3, R.MEDIA: 0.2, R.PROYECTO: 0.1, R.AIRE: 0.05}
+    assert POB.tabla_empuje_postflop(tabla0, True, "bandido", {"tag": 1.0}, p) == tabla0
+
+
+def test_los_params_por_defecto_traen_los_componentes_y_las_variantes_json_los_apagan():
+    from params import cargar_params
+    base = cargar_params()["calibracion_allin"]
+    assert base["activa"] is False and all(base["componentes"].values())
+    import json, os, tempfile
+    ruta = os.path.join(tempfile.mkdtemp(), "v.json")
+    json.dump({"calibracion_allin": {"activa": True, "componentes": {"paga_post": False}}}, open(ruta, "w"))
+    p = cargar_params(ruta)["calibracion_allin"]
+    assert p["activa"] and p["componentes"] == {"paga_pre": True, "paga_post": False, "empuja_pre": True, "empuja_post": True}
+
+
 # --- Rango de quien empuja ------------------------------------------------------------------------------
 
 def test_corte_empuje_preflop_se_encoge_hacia_100():

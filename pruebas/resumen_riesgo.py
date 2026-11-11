@@ -19,7 +19,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import evaluar as E  # noqa: E402
 
-ORDEN = ["v1", "cal", "u5k", "u5k-cal", "u10k", "u10k-cal", "u20k", "u20k-cal", "u40k", "u40k-cal"]
+ORDEN = ["v1", "cal", "calpre", "u5k", "u5k-calpre", "u10k", "u10k-calpre", "u20k", "u20k-calpre", "u40k", "u40k-calpre", "u5k-cal", "u10k-cal", "u20k-cal", "u40k-cal"]
 EV = os.path.join(E.SALIDAS, "evaluaciones")
 
 

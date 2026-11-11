@@ -184,7 +184,10 @@ PARAMS = {
     # Qué manos paga y qué manos empuja cada bot en un all-in, medido con el historial local con las cartas de todos
     # (pruebas/calibrar_allin.py escribe calibracion_allin.py). Solo rige en modo profundo (stack efectivo > 25 bb) y
     # con shrinkage hacia lo actual: p = (k + s·p_actual)/(n + s). `activa` False = el modelo de siempre.
-    "calibracion_allin": {"activa": False, "s": 20.0, **CALIBRACION_ALLIN},
+    # `componentes`: cada pieza se apaga por separado (paga_pre/paga_post: P(paga un all-in); empuja_pre/empuja_post: rango de quien empuja).
+    "calibracion_allin": {"activa": False, "s": 20.0,
+                          "componentes": {"paga_pre": True, "paga_post": True, "empuja_pre": True, "empuja_post": True},
+                          **CALIBRACION_ALLIN},
     # --- Solo pruebas -------------------------------------------------------------
     "debug": {"retardo_s": 0.0},   # pausa artificial por decisión (para poder matar a Bender a mitad de mesa)
     # --- Capa 1: opciones que el .tex no fija (extensiones propias) -----------------

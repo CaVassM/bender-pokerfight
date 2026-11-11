@@ -3,7 +3,8 @@
 
 Configuraciones (las variantes están en pruebas/variantes/riesgo/):
   v1        = el código de siempre (utilidad apagada, calibración apagada)  <- referencia (= v1-probabilistico)
-  cal       = solo la calibración de los all-in
+  cal       = calibración COMPLETA de los all-in (4 componentes)
+  calpre    = calibración sin la P(paga) postflop: P(paga) preflop + rango de quien empuja (preflop y postflop)
   u5k u10k u20k u40k           = utilidad ln(S+K) con K = 5 000 / 10 000 / 20 000 / 40 000
   u5k-cal u10k-cal u20k-cal u40k-cal  = lo mismo con la calibración
 
@@ -27,7 +28,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 PY = sys.executable
 FIJO = os.path.join(AQUI, "evaluar_fijo.py")
 VARIANTES = os.path.join(AQUI, "variantes", "riesgo")
-ORDEN = ["v1", "cal", "u10k", "u10k-cal", "u5k", "u5k-cal", "u20k", "u20k-cal", "u40k", "u40k-cal"]
+ORDEN = ["v1", "u10k", "calpre", "u10k-calpre", "u5k", "u20k", "u40k", "u5k-calpre", "u20k-calpre", "u40k-calpre", "cal"]
 ENTRENAMIENTO = "aleatorio,conservador,base,estadistico,bandido,espia"
 
 
@@ -46,7 +47,7 @@ def main():
     ap.add_argument("--mesas", type=int, default=600)
     ap.add_argument("--paralelo", type=int, default=8)
     ap.add_argument("--configs", default=",".join(ORDEN))
-    ap.add_argument("--mensajes-en", default="v1,cal", help="configuraciones de mesas con log completo (para riesgo_ev.py)")
+    ap.add_argument("--mensajes-en", default="v1,cal,calpre", help="configuraciones de mesas con log completo (para riesgo_ev.py)")
     args = ap.parse_args()
     dir_salida = os.path.join(AQUI, "salidas", "comparar")
     os.makedirs(dir_salida, exist_ok=True)
@@ -67,6 +68,10 @@ def main():
             if nombre != "v1":
                 cmd += ["--comparar", "riesgo-mesas-v1"]
         salida = os.path.join(dir_salida, f"{etiqueta}.txt")
+        pref = "camp-" if args.flujo == "campeonatos" else ""
+        if os.path.exists(os.path.join(AQUI, "salidas", "evaluaciones", f"{pref}{etiqueta}.json")):
+            print(f"[{args.flujo}] {nombre}: ya hecho, se salta", flush=True)
+            continue
         print(f"[{args.flujo}] {nombre} ...", flush=True)
         rc, dt = correr(cmd, salida)
         print(f"[{args.flujo}] {nombre}: código {rc}, {dt / 60:.1f} min -> {salida}", flush=True)
