@@ -15,6 +15,7 @@ código evaluado es una copia inmutable del commit: se puede seguir editando mie
 """
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -58,6 +59,9 @@ def main():
     ap.add_argument("--commit", default=None)
     ap.add_argument("--sucio", action="store_true", help="permite cambios sin commitear (NO reproducible)")
     ap.add_argument("--script", default="evaluar.py")
+    ap.add_argument("--referencia", default=None,
+                    help="tag/commit contra el que el CÓDIGO DE DECISIÓN debe ser idéntico (p. ej. v1-probabilistico): "
+                         "se niega si `git diff <ref> <commit> -- . ':!pruebas' ':!*.md'` no sale vacío, y guarda ambos hashes")
     ap.add_argument("-h", "--help", action="store_true")
     args, resto = ap.parse_known_args()
     if args.help:
@@ -77,7 +81,19 @@ def main():
     base = preparar_worktree(commit)
     print(f"[evaluar_fijo] commit {commit[:8]} en {base}", flush=True)
 
-    env = dict(os.environ, BENDER_SALIDAS=os.path.join(BENDER, "pruebas", "salidas"), BENDER_COMMIT=commit[:8])
+    env = dict(os.environ, BENDER_SALIDAS=os.path.join(BENDER, "pruebas", "salidas"), BENDER_COMMIT=commit[:8],
+               BENDER_COMMIT_COMPLETO=commit)
+    if args.referencia:
+        ref = git("rev-list", "-n", "1", args.referencia)
+        # Literal: todo salvo pruebas/. Código: además sin *.md (documentos que no afectan a ninguna decisión).
+        literal = git("diff", "--name-only", ref, commit, "--", ".", ":!pruebas").splitlines()
+        codigo = git("diff", "--name-only", ref, commit, "--", ".", ":!pruebas", ":!*.md").splitlines()
+        print(f"[evaluar_fijo] referencia {args.referencia} = {ref[:8]}; diff fuera de pruebas/: {literal or 'vacío'}; "
+              f"diff de código (sin *.md): {codigo or 'vacío'}", flush=True)
+        if codigo:
+            sys.exit(f"el código de decisión difiere de {args.referencia}: {codigo}")
+        env.update(BENDER_REFERENCIA=ref, BENDER_REFERENCIA_NOMBRE=args.referencia,
+                   BENDER_DIFF_LITERAL=json.dumps(literal), BENDER_DIFF_CODIGO=json.dumps(codigo))
     script = os.path.join(base, "bender", "pruebas", args.script)
     return subprocess.run([sys.executable, script, *resto], cwd=base, env=env).returncode
 

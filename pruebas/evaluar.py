@@ -85,14 +85,16 @@ def comando_rival_arena(nombre):
     return [os.path.join(BIN, nombre + EXE)] + extra
 
 
-def archivo_params(dir_salida, params_usuario):
+def archivo_params(dir_salida, params_usuario, mensajes=False):
     """JSON de parámetros de Bender para las corridas: sin log de mensajes crudos (corridas largas)
     y, si se pidió, mezclado con las variantes del usuario."""
     base = {}
     if params_usuario:
         with open(params_usuario, encoding="utf-8") as f:
             base = json.load(f)
-    base.setdefault("registro", {})["mensajes"] = False
+    # `mensajes=True` guarda cada mensaje crudo (stack exacto de cada mano, para analizar quiebras): solo logging,
+    # no toca ninguna decisión; ocupa ~10 KB por mano.
+    base.setdefault("registro", {})["mensajes"] = bool(mensajes)
     ruta = os.path.join(dir_salida, "params-bender.json")
     with open(ruta, "w", encoding="utf-8") as f:
         json.dump(base, f)
@@ -305,6 +307,7 @@ def main():
     ap.add_argument("--puerto-base", type=int, default=9300)
     ap.add_argument("--comparar", default=None, help="etiqueta de una evaluación anterior (mismas semillas)")
     ap.add_argument("--historial", action="store_true", help="guarda el historial de manos de la arena (cartas de todos)")
+    ap.add_argument("--mensajes", action="store_true", help="Bender guarda cada mensaje crudo (necesario para analizar_quiebras.py)")
     args = ap.parse_args()
 
     rivales = [r for r in args.rivales.split(",") if r]
@@ -317,8 +320,13 @@ def main():
 
     dir_eval = os.path.join(SALIDAS, f"eval-{args.etiqueta}")
     os.makedirs(dir_eval, exist_ok=True)
-    ruta_params = archivo_params(dir_eval, args.params)
+    ruta_params = archivo_params(dir_eval, args.params, args.mensajes)
     resultado = {"etiqueta": args.etiqueta, "commit": os.environ.get("BENDER_COMMIT"), "params": args.params,
+                 "commit_completo": os.environ.get("BENDER_COMMIT_COMPLETO"),
+                 "referencia": {"nombre": os.environ.get("BENDER_REFERENCIA_NOMBRE"), "commit": os.environ.get("BENDER_REFERENCIA"),
+                                "diff_literal": os.environ.get("BENDER_DIFF_LITERAL"),
+                                "diff_codigo": os.environ.get("BENDER_DIFF_CODIGO")},
+                 "mensajes_crudos": bool(args.mensajes),
                  "rivales": rivales, "semillas": args.semillas,
                  "semilla_base": args.semilla_base, "manos_hu": args.manos, "hu": {}, "mesa": {}}
     inicio = time.time()
@@ -351,6 +359,9 @@ def main():
         resultado["mesa"] = {"muestras": [m["muestra"] for m in validas], "claves": [str(i) for i, m in enumerate(mesas) if m["muestra"] is not None],
                              "rondas": sum(m["rondas"] for m in mesas), "duracion": sum(m["duracion"] for m in mesas),
                              "descartadas": len(mesas) - len(validas),
+                             # una fila por mesa (también las descartadas): para bootstrap y análisis de quiebras
+                             "detalle": [{"i": i, "rivales": m["rivales"], "orden": m["orden"], "rondas": m["rondas"],
+                                          "final": m.get("final"), "muestra": m["muestra"]} for i, m in enumerate(mesas)],
                              "por_rival": {r: [m["muestra"] for m in validas if r in m["rivales"]] for r in rivales}}
     resultado["tiempo_total_s"] = time.time() - inicio
     resultado["decisiones"] = tiempos_de_decision(dir_eval)
