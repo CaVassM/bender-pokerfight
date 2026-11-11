@@ -128,11 +128,11 @@ PARAMS = {
     # --- Reconocimiento POR COMPORTAMIENTO de bots que no tienen huella de montos (nunca apuestan) -----------
     # El conservador nunca apuesta ni sube, así que su huella de montos queda vacía. Se lo reconoce por lo que hace:
     # VPIP alto, PFR ≈ 0 y ninguna apuesta ni subida postflop. Posterior bayesiano H1 (conservador) contra H0 (otro bot):
-    # P(acción agresiva por oportunidad) 0,005 contra 0,2 (el mínimo medido en los demás bots es 0,21, bandido; el del
+    # P(acción agresiva por oportunidad) 0,001 contra 0,2 (el mínimo medido en los demás bots es 0,21, bandido; el del
     # conservador es 0 de 8 959); VPIP 0,82 contra 0,40; PFR 0,01 contra 0,14. Prior 0,1 como los demás bots del kit;
     # mismo umbral que la huella (0,9) y mínimo de oportunidades para no decidir con ruido.
     "conductual": {
-        "conservador": {"prior": 0.1, "eps_agresion": 0.005, "p_agresion_otros": 0.2, "vpip_si": 0.82, "vpip_no": 0.40,
+        "conservador": {"prior": 0.1, "eps_agresion": 0.001, "p_agresion_otros": 0.2, "vpip_si": 0.82, "vpip_no": 0.40,
                         "pfr_si": 0.01, "pfr_no": 0.14, "min_oportunidades": 10},
     },
     # --- §2.7 Huella de los montos ------------------------------------------------
