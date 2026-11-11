@@ -136,7 +136,8 @@ def opcion_elegida(info, accion):
 def describir(m, d, inv):
     info = d.get("info") or {}
     acc = d["accion"]
-    e_prima, ev_elegida, _ = opcion_elegida(info, acc)
+    e_prima, ev_elegida, ent = opcion_elegida(info, acc)
+    ent = ent or {}
     tabla = info.get("tabla_ev") or []
     otras = [t["ev"] for t in tabla if t.get("ev") is not None and not t.get("descartada")
              and t.get("ev") != ev_elegida]
@@ -155,6 +156,9 @@ def describir(m, d, inv):
     return {"etapa": d["etapa"], "modo": info.get("modo"), "decision": info.get("decision"), "accion": acc.get("tipo"),
             "motivo": d.get("motivo"), "saldo": saldo, "s_ef_bb": d.get("s_ef_bb"), "inversion": inv, "P": P, "C": C,
             "e": e, "e_prima": e_prima, "e_min": e_min, "ev_elegida": ev_elegida, "margen_ev": margen,
+            "f": ent.get("f"), "x": ent.get("x"), "A": ent.get("A"),
+            # parte del EV que viene de que todos se retiren (f·P) frente a la que viene del showdown si pagan
+            "ev_por_fold_pct": (ent["f"] * P / ev_elegida) if (ent.get("f") is not None and ev_elegida and ev_elegida > 0) else None,
             "opciones": [(t.get("accion"), t.get("ev"), bool(t.get("descartada"))) for t in tabla],
             "n_rivales_decision": d.get("rivales"), "rivales": rivales, "cartas": d.get("cartas"), "comunitarias": d.get("mesa"),
             "posicion": d.get("posicion")}
@@ -289,6 +293,8 @@ def main():
     out["manos_grandes"] = len(grandes)
     out["manos_de_quiebra"] = sum(1 for g in grandes if g["quiebra"])
     out["mano_de_la_quiebra"] = {p: percentil(quiebra_en_mano, p) for p in (25, 50, 75)} if quiebra_en_mano else None
+    sb = [g["stack_antes"] / BB for g in grandes if g["quiebra"]]
+    out["stack_antes_mano_quiebra_bb"] = {p: percentil(sb, p) for p in (25, 50, 75)} if sb else None
 
     def resumen(filas):
         tab = defaultdict(list)
@@ -298,7 +304,12 @@ def main():
         for cat, gs in sorted(tab.items(), key=lambda x: -len(x[1])):
             es = [g["e"] for g in gs if g.get("e") is not None]
             mg = [g["margen_ev"] for g in gs if g.get("margen_ev") is not None]
+            fs = [g["f"] for g in gs if g.get("f") is not None]
+            evf = [g["ev_por_fold_pct"] for g in gs if g.get("ev_por_fold_pct") is not None]
             res_t.append({"categoria": cat, "n": len(gs), "pct": len(gs) / len(filas),
+                          "f_mediana": statistics.median(fs) if fs else None,
+                          "ev_por_fold_mediana": statistics.median(evf) if evf else None,
+                          "e_prima_media": statistics.mean([g["e_prima"] for g in gs if g.get("e_prima") is not None] or [float("nan")]),
                           "e_media": statistics.mean(es) if es else None,
                           "pct_e_menor_05": (sum(1 for x in es if x < 0.5) / len(es)) if es else None,
                           "margen_ev_mediano_pct_stack": (statistics.median(mg) * 100) if mg else None,
@@ -391,17 +402,23 @@ def imprimir(o, quiebra_filas, ejemplos):
     if o["mano_de_la_quiebra"]:
         q = o["mano_de_la_quiebra"]
         print(f"- Mano de la mesa en que cae a 0: p25 {q[25]:.0f} | mediana {q[50]:.0f} | p75 {q[75]:.0f} (de 50)")
+        s0 = o["stack_antes_mano_quiebra_bb"]
+        print(f"- Stack de Bender al EMPEZAR la mano de la quiebra (bb): p25 {s0[25]:.0f} | mediana {s0[50]:.0f} | p75 {s0[75]:.0f} "
+              "(si es ~100 bb, la quiebra es una sola mano grande desde stack profundo; si es chico, hubo desgaste antes)")
     print("\n| con este rival en la mesa | mesas | quiebras | tasa | IC 95 % | mediana stack final |\n|---|---|---|---|---|---|")
     for r, v in sorted(o["por_rival"].items(), key=lambda x: -x[1]["tasa"]):
         print(f"| {r} | {v['mesas']} | {v['quiebras']} | {pct(v['tasa'])} | {100 * v['ic'][0]:.0f}-{100 * v['ic'][1]:.0f} % | {v['mediana_final']:,.0f} |")
     print(f"\n### 2-3. Manos en que Bender pierde > 50 % de su stack: {o['manos_grandes']} de {o['manos_analizadas']} manos ({o['manos_de_quiebra']} dejaron a Bender en 0)")
     for titulo, clave in (("Todas las manos grandes", "resumen_manos_grandes"), ("Solo las que lo dejaron en 0", "resumen_manos_de_quiebra")):
         print(f"\n**{titulo}**\n")
-        print("| tipo de la decisión decisiva | n | % | e media | % con e<0,5 | margen EV mediano (% stack) | % cerca del umbral | % multiway | % stack ef.<30 bb |\n|---|---|---|---|---|---|---|---|---|")
+        print("| tipo de la decisión decisiva | n | % | e media | e' media | % con e<0,5 | f mediana | % del EV por fold equity | margen EV mediano (% stack) | % cerca del umbral | % multiway | % stack ef.<30 bb |\n|---|---|---|---|---|---|---|---|---|---|---|---|")
         for f in o[clave]:
             e = "n/d" if f["e_media"] is None else f"{f['e_media']:.2f}"
+            ep = "n/d" if f["e_prima_media"] != f["e_prima_media"] else f"{f['e_prima_media']:.2f}"
             m = "n/d" if f["margen_ev_mediano_pct_stack"] is None else f"{f['margen_ev_mediano_pct_stack']:.1f}"
-            print(f"| {f['categoria']} | {f['n']} | {pct(f['pct'])} | {e} | {pct(f['pct_e_menor_05'])} | {m} | {pct(f['pct_cerca_umbral'])} | {pct(f['pct_multiway'])} | {pct(f['pct_stack_efectivo_menor_30bb'])} |")
+            fm = "n/d" if f["f_mediana"] is None else f"{f['f_mediana']:.2f}"
+            evf = "n/d" if f["ev_por_fold_mediana"] is None else pct(f["ev_por_fold_mediana"])
+            print(f"| {f['categoria']} | {f['n']} | {pct(f['pct'])} | {e} | {ep} | {pct(f['pct_e_menor_05'])} | {fm} | {evf} | {m} | {pct(f['pct_cerca_umbral'])} | {pct(f['pct_multiway'])} | {pct(f['pct_stack_efectivo_menor_30bb'])} |")
     for nombre, etiqueta in (("grandes", "manos grandes"), ("quiebra", "manos de quiebra")):
         print(f"\nCortes ({etiqueta}): calle {o[f'por_calle_{nombre}']} | modo {o[f'por_modo_{nombre}']} | acción {o[f'por_accion_{nombre}']} | {o[f'multiway_{nombre}']} | e {o[f'por_bucket_e_{nombre}']}")
         print(f"  quién ganó el bote: {o[f'por_ganador_{nombre}']}")
