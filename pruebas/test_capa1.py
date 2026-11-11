@@ -1,6 +1,7 @@
 """Pruebas de la Capa 1: fórmulas contra los ejemplos del .tex, apertura, push/fold,
 descartes, mezcla y un fuzz que comprueba que nunca sale una acción inválida."""
 
+import math
 import random
 
 import pytest
@@ -294,6 +295,112 @@ def test_sin_rangos_de_poblacion_usa_manos_al_azar():
     turno = spot("As Kh", rivales=((9750, 250),), yo=(9900, 100), pozo=400, apuesta_actual=250, historial=historial, boton=1)
     _, _, info = decidir(turno, p)
     assert info["rangos"]["r0"]["combos"] > 1000                          # todas las manos vivas
+
+
+# --- §1.13 Utilidad con colchón ------------------------------------------------------------------------------
+
+def test_utilidad_moneda_al_aire_pide_63_por_ciento_con_K_10000():
+    """Stack de 10 000, K = 10 000, all-in contra un rival que paga siempre (f=0, P=0, A=A'=10 000): ganar deja
+    ln(30 000), perder ln(10 000) y retirarse ln(20 000). Conviene si e·ln 3 >= ln 2, o sea e >= 63,1 %."""
+    from capa1 import u_apuesta, u_retirarse, equivalente_cierto
+    S, K = 10_000, 10_000
+    umbral = math.log(2) / math.log(3)
+    assert umbral == pytest.approx(0.6309, abs=1e-4)
+    assert u_apuesta(0.0, 0, 0.64, 10_000, 10_000, S, K) > u_retirarse(S, K)
+    assert u_apuesta(0.0, 0, 0.62, 10_000, 10_000, S, K) < u_retirarse(S, K)
+    # el mismo all-in con e' = 0,55 tiene EV = 0,55·20 000 − 10 000 = +1 000 pero equivalente cierto NEGATIVO
+    assert ev_apuesta(0.0, 0, 0.55, 10_000, 10_000) == pytest.approx(1000.0)
+    assert equivalente_cierto(u_apuesta(0.0, 0, 0.55, 10_000, 10_000, S, K), S, K) < 0
+    # con un colchón mayor la exigencia baja: K = 40 000 -> e >= ln(1,25)/ln(1,5) = 55,0 %
+    assert u_apuesta(0.0, 0, 0.56, 10_000, 10_000, S, 40_000) > u_retirarse(S, 40_000)
+    assert u_apuesta(0.0, 0, 0.54, 10_000, 10_000, S, 40_000) < u_retirarse(S, 40_000)
+
+
+def test_utilidad_hojas_del_arbol():
+    from capa1 import u_apuesta, u_igualar, u_pasar, u_retirarse, utilidad
+    S, K, P = 6000, 10_000, 900
+    assert u_retirarse(S, K) == pytest.approx(math.log(S + K))
+    assert u_pasar(1.0, P, S, K) == pytest.approx(utilidad(S + P, K))
+    assert u_pasar(0.0, P, S, K) == pytest.approx(utilidad(S, K))
+    assert u_igualar(1.0, P, 400, S, K) == pytest.approx(utilidad(S + P, K))
+    assert u_igualar(0.0, P, 400, S, K) == pytest.approx(utilidad(S - 400, K))
+    # call corto: solo se pueden cubrir 300 de 900; lo no cubierto (600) vuelve a su dueño, igual que ev_igualar
+    assert u_igualar(1.0, 1300, 900, 300, K) == pytest.approx(utilidad(300 + 700, K))
+    assert u_igualar(0.0, 1300, 900, 300, K) == pytest.approx(utilidad(0, K))
+    # apuesta: todos se retiran -> S+P; si pagan, depende de e'
+    assert u_apuesta(1.0, P, 0.3, 500, 500, S, K) == pytest.approx(utilidad(S + P, K))
+    assert u_apuesta(0.0, P, 1.0, 500, 450, S, K) == pytest.approx(utilidad(S + P + 450, K))
+    assert u_apuesta(0.0, P, 0.0, 500, 450, S, K) == pytest.approx(utilidad(S - 500, K))
+
+
+def test_utilidad_con_K_enorme_recupera_el_ev():
+    """K → ∞: u(S) es lineal y el equivalente cierto coincide con el EV de las fórmulas de siempre."""
+    from capa1 import equivalente_cierto, u_apuesta, u_igualar, u_pasar
+    S, K = 8000, 1e9              # (con K mayor el error de redondeo del logaritmo en coma flotante supera a la diferencia)
+    for e in (0.2, 0.5, 0.8):
+        assert equivalente_cierto(u_pasar(e, 700, S, K), S, K) == pytest.approx(ev_pasar(e, 700), rel=1e-3, abs=0.05)
+        assert equivalente_cierto(u_igualar(e, 700, 300, S, K), S, K) == pytest.approx(ev_igualar(e, 700, 300, S), rel=1e-3, abs=0.05)
+        assert equivalente_cierto(u_apuesta(0.4, 700, e, 500, 450, S, K), S, K) == pytest.approx(ev_apuesta(0.4, 700, e, 500, 450), rel=1e-3, abs=0.05)
+
+
+def test_utilidad_la_tabla_trae_u_y_ce_y_retirarse_es_la_referencia():
+    turno = spot("Ah Qd", "Kd 9c 4s", rivales=((9000, 0),), yo=(9000, 0), pozo=600)
+    p = params()
+    p["riesgo"]["K"] = 10_000
+    _, _, info = decidir(turno, p)
+    assert info["utilidad"] == {"activa": False, "K": 10_000, "S": 9000}
+    for fila in info["tabla_ev"]:
+        assert "u" in fila and "ce" in fila and "ev" in fila
+    assert all(f["ce"] == 0.0 and f["u"] == pytest.approx(math.log(19_000), abs=1e-5) for f in info["tabla_ev"] if f["tipo"] == "fold")
+
+
+def _spots_de_prueba(n=40, semilla=11):
+    rng = random.Random(semilla)
+    out = []
+    for _ in range(n):
+        n_board = rng.choice([0, 3, 4, 5])
+        cartas = rng.sample(range(52), 2 + n_board)
+        mano, board = cartas[:2], cartas[2:]
+        saldo = rng.choice([1500, 4000, 10_000, 14_000])
+        apuesta = rng.choice([0, 0, 300, 900])
+        riv = [(rng.choice([6000, 10_000]), apuesta)] * rng.choice([1, 2])
+        pozo = max(150, 2 * apuesta + rng.choice([200, 900, 2000]))
+        out.append(spot(C.texto_cartas(mano), C.texto_cartas(board) if board else "", rivales=tuple(riv), yo=(saldo, 0), pozo=pozo,
+                        apuesta_actual=apuesta, boton=rng.randrange(6), silla_yo=rng.randrange(6)))
+    return out
+
+
+def test_utilidad_apagada_no_cambia_las_decisiones_y_con_K_enorme_tampoco():
+    """riesgo.utilidad=False es el comportamiento de siempre (y no depende de K); con utilidad=True y K enorme se elige igual."""
+    p_off, p_on = params(n_min=300, eps_obj=0.02), params(n_min=300, eps_obj=0.02)
+    p_off["riesgo"].update({"utilidad": False, "K": 500})
+    p_on["riesgo"].update({"utilidad": True, "K": 1e9})
+    p_ref = params(n_min=300, eps_obj=0.02)
+    iguales = 0
+    for t in _spots_de_prueba():
+        if not t.validas or not t.rivales:
+            continue
+        a_ref = decidir(t, p_ref, semilla=3)[0]
+        a_off = decidir(t, p_off, semilla=3)[0]
+        a_on = decidir(t, p_on, semilla=3)[0]
+        assert a_off == a_ref                                  # K no importa con el interruptor apagado
+        iguales += a_on == a_ref
+    assert iguales >= 35                                       # con K enorme casi siempre igual (empates numéricos aparte)
+
+
+def test_utilidad_con_K_chico_hace_menos_all_in_y_nunca_acciones_invalidas():
+    p_off, p_on = params(n_min=300, eps_obj=0.02), params(n_min=300, eps_obj=0.02)
+    p_on["riesgo"].update({"utilidad": True, "K": 2000})
+    n_off = n_on = 0
+    for t in _spots_de_prueba(60, semilla=5):
+        if not t.validas or not t.rivales:
+            continue
+        a_off, _, _ = decidir(t, p_off, semilla=9)
+        a_on, _, info = decidir(t, p_on, semilla=9)
+        assert accion_es_valida(a_on, t.validas)
+        n_off += a_off["tipo"] == "allin"
+        n_on += a_on["tipo"] == "allin"
+    assert n_on <= n_off
 
 
 # --- Fuzz: nunca una acción inválida, nunca una excepción ------------------------------------------------

@@ -16,12 +16,16 @@ Una decisión sigue siempre estos pasos (cada uno cita su sección):
   4. Se descartan acciones (multiway y compromiso) y se elige el mayor EV, con
      una mezcla para no ser predecible (§1.11).
   5. Perilla de riesgo del torneo (§1.12) con g = 0 por ahora.
+  6. Utilidad con colchón (§1.13): con `riesgo.utilidad` en True, en vez del EV en fichas se elige la
+     UTILIDAD ESPERADA u(S) = ln(S + K) del mismo árbol (la mezcla compara en fichas equivalentes). El EV y
+     la utilidad de cada opción quedan siempre en el registro (`tabla_ev`: ev, u, ce).
 
 Cada decisión devuelve (acción, motivo, info): `info` trae todo lo que hace falta
 para entender el porqué (modo, equities con su N y tiempo, c_i, f, la tabla de EV
 con su fórmula y los descartes), y bot.py lo escribe en el registro.
 """
 
+import math
 import random
 
 import cartas as C
@@ -67,6 +71,45 @@ def ev_igualar(e, P, C, saldo, delta=0.0):
 def ev_apuesta(f, P, e_prima, A, A_prima):
     """§1.9 EV(apuesta) = f·P + (1−f)·[e'·(P+A+A') − A]."""
     return f * P + (1.0 - f) * (e_prima * (P + A + A_prima) - A)
+
+
+# --- §1.13 Utilidad con colchón ------------------------------------------------------------------------
+# u(S) = ln(S + K), con S = las fichas que le quedan detrás a Bender cuando acaba la mano. Es el mismo árbol
+# de resultados del EV (§1.6-§1.9), pero cada hoja se valora con u en vez de en fichas:
+#   retirarse : u(S)                        pasar : e·u(S+P) + (1−e)·u(S)
+#   igualar C : e·u(S+p_ef) + (1−e)·u(S−c_ef)           (c_ef = min(C, S); lo no cubierto vuelve, como ev_igualar)
+#   apostar A : f·u(S+P) + (1−f)·[e'·u(S+P+A') + (1−e')·u(S−A)]
+# Como u es cóncava, una apuesta que pone en juego todo el stack rinde menos utilidad que su EV en fichas.
+
+def utilidad(S, K):
+    """u(S) = ln(S + K)."""
+    return math.log(max(S, 0.0) + K)
+
+
+def u_retirarse(S, K):
+    return utilidad(S, K)
+
+
+def u_pasar(e, P, S, K):
+    return e * utilidad(S + P, K) + (1.0 - e) * utilidad(S, K)
+
+
+def u_igualar(e, P, C, S, K):
+    """Igual que ev_igualar: si el saldo no alcanza se iguala con lo que hay y lo no cubierto vuelve a su dueño."""
+    c_ef = min(C, S)
+    p_ef = P - (C - c_ef)
+    return e * utilidad(S + p_ef, K) + (1.0 - e) * utilidad(S - c_ef, K)
+
+
+def u_apuesta(f, P, e_prima, A, A_prima, S, K):
+    return (f * utilidad(S + P, K)
+            + (1.0 - f) * (e_prima * utilidad(S + P + A_prima, K) + (1.0 - e_prima) * utilidad(S - A, K)))
+
+
+def equivalente_cierto(U, S, K):
+    """Fichas ganadas con certeza que valen lo mismo que la utilidad esperada U: (S+K)·(e^{U−u(S)} − 1).
+    Es el EV "ajustado por riesgo": 0 para retirarse, y lo que se usa para la mezcla de §1.11 (que compara fichas)."""
+    return (S + K) * math.expm1(U - utilidad(S, K))
 
 
 class Capa1:
@@ -138,8 +181,9 @@ class Capa1:
             if d is not None and not cfg["filtros_tipo"]:
                 d["tipo"] = None
             return d
+        profundo = modo_de(turno.stack_efectivo_bb(), self.p["modo"]) == "profundo"      # la calibración de all-in rige aquí
         return {r.id: POB.rango_de_rival(r.id, pos.get(r.id, ""), evs, board, mano, self.p, self.cache,
-                                         pi=self._pis.get(r.id), expl=expl(r.id))
+                                         pi=self._pis.get(r.id), expl=expl(r.id), profundo=profundo)
                 for r in turno.rivales}
 
     def _equity(self, mano, board, rangos, umbrales, mesa, t_max):
@@ -253,7 +297,9 @@ class Capa1:
                 tope_cubierto = big.saldo + big.apuesta_ronda - yo.apuesta_ronda
                 A_ef = max(0, min(A, tope_cubierto))
                 A_p = max(0, min(monto - big.apuesta_ronda, big.saldo))
-                cs = {r.id: self._c_rival(r, x, pushfold, rangos[r.id], board) for r in responden}
+                es_allin = acc["tipo"] == "allin" or monto >= turno.techo
+                cs = {r.id: self._c_rival(r, x, pushfold, rangos[r.id], board, allin=es_allin and modo == "profundo")
+                      for r in responden}
                 f = 1.0
                 for v in cs.values():
                     f *= (1.0 - v)
@@ -263,8 +309,27 @@ class Capa1:
                 c["e_prima"] = e_prima
                 c["ev"] = ev_apuesta(f, P, e_prima, A_ef, A_p)
                 c["x"], c["A"], c["A_prima"], c["f"], c["c"] = round(x, 3), A_ef, A_p, round(f, 4), {k: round(v, 3) for k, v in cs.items()}
+                c["f_exacta"] = f                                    # sin redondear: la utilidad (§1.13) usa el mismo f
                 c["tipo_apuesta"] = tipo_de_apuesta(e_prima, p["decision"])
                 c["formula"] = (f"f·P+(1−f)·[e'·(P+A+A')−A] con f={f:.3f} P={P} e'={e_prima:.3f} A={A_ef} A'={A_p} (x={x:.2f})")
+
+        # --- Utilidad con colchón (§1.13): el mismo árbol, cada hoja valorada con u(S) = ln(S + K) ---
+        # Se calcula siempre (queda en el registro); solo manda en la elección si riesgo.utilidad es True.
+        rk = p["riesgo"]
+        S, K = yo.saldo, rk["K"]
+        for c in candidatos:
+            if c["clase"] == "fold":
+                c["u"], c["ce"] = u_retirarse(S, K), 0.0
+                continue
+            if c["clase"] == "check":
+                c["u"] = u_pasar(e, P, S, K)
+            elif c["clase"] == "call":
+                c["u"] = u_igualar(e, P, C_, S, K)
+            else:
+                c["u"] = u_apuesta(c["f_exacta"], P, c["e_prima"], c["A"], c["A_prima"], S, K)
+            c["ce"] = equivalente_cierto(c["u"], S, K)
+        clave = "ce" if rk["utilidad"] else "ev"          # en qué se compara: equivalente cierto (fichas) o EV (fichas)
+        info["utilidad"] = {"activa": bool(rk["utilidad"]), "K": K, "S": S}
 
         # --- Descartes (§1.11) ---
         d = p["decision"]
@@ -296,30 +361,43 @@ class Capa1:
         vivos = [c for c in candidatos if not c["descartada"]]
         if not vivos:                                   # nunca quedarse sin acción
             vivos = [c for c in candidatos if c["clase"] in ("fold", "check", "call")] or candidatos
-        vivos.sort(key=lambda c: -c["ev"])
+        vivos.sort(key=lambda c: -c[clave])
         elegido, mezcla = vivos[0], False
         if len(vivos) > 1:
             a, b = vivos[0], vivos[1]
-            if (a["ev"] - b["ev"] < d["mezcla_ev_frac"] * max(P, bb) and b["ev"] >= 0
+            # §1.13: la mezcla compara en la misma unidad que la elección (con utilidad, en fichas equivalentes: `ce`)
+            if (a[clave] - b[clave] < d["mezcla_ev_frac"] * max(P, bb) and b[clave] >= 0
                     and a["clase"] != "fold" and b["clase"] != "fold" and self.rng_mezcla.random() < d["mezcla_prob"]):
                 elegido, mezcla = b, True
 
         info["tabla_ev"] = [{"accion": c["nombre"], "tipo": c["accion"]["tipo"], "monto": c["accion"].get("monto"),
-                             "ev": round(c["ev"], 1), "formula": c["formula"], "descartada": c["descartada"],
+                             "ev": round(c["ev"], 1), "u": round(c["u"], 6), "ce": round(c["ce"], 1),
+                             "formula": c["formula"], "descartada": c["descartada"],
                              **({k: c[k] for k in ("x", "A", "A_prima", "f", "c", "e_prima", "tipo_apuesta") if k in c})}
                             for c in candidatos]
         info["elegida"], info["mezcla"] = elegido["nombre"], mezcla
-        motivo = f"{elegido['nombre']} (EV {elegido['ev']:+.0f})" + (" [mezcla con la 2.ª mejor]" if mezcla else "")
+        motivo = (f"{elegido['nombre']} (EV {elegido['ev']:+.0f}" + (f", EC {elegido['ce']:+.0f}" if rk["utilidad"] else "") + ")"
+                  + (" [mezcla con la 2.ª mejor]" if mezcla else ""))
         return elegido["accion"], motivo, info
 
     # ------------------------------------------------------------------ c_i y e'
-    def _c_rival(self, rival, x, pushfold, rango, board):
+    def _c_rival(self, rival, x, pushfold, rango, board, allin=False):
         """c_i, la probabilidad de que el rival siga ante una apuesta de tamaño x.
 
         §3.3: θ_base de c_i es el c que sale del RANGO y las plantillas (§2.1); solo sin rango se
         usa c(x) de población (§1.7). Postflop: c = Σ w·P(sigue|h)/Σ w (a x≈1/2) escalado a x.
         Preflop: la parte del rango que está dentro del umbral de fuerza de c_pob(x). En push/fold:
-        0,385 (rango de pago Nash a 10 bb, §1.10)."""
+        0,385 (rango de pago Nash a 10 bb, §1.10).
+
+        `allin` (all-in en modo profundo) con la calibración activa: ese c se encoge hacia lo MEDIDO de cuántas veces
+        paga ese bot/tipo un all-in a 100 bb (pruebas/calibrar_allin.py)."""
+        c = self._c_rival_modelo(rival, x, pushfold, rango, board)
+        if allin and not pushfold and POB.calibracion_activa(self.p, True):
+            lec = self._lect.get(rival.id)
+            c = POB.c_calibrada(c, not board, lec.bot if lec else None, self._pis.get(rival.id) or self.p["capa1"]["pi_defecto"], self.p)
+        return c
+
+    def _c_rival_modelo(self, rival, x, pushfold, rango, board):
         p = self.p
         if pushfold:
             return p["pushfold"]["c_pago"]

@@ -35,6 +35,84 @@ def c_poblacion(x, ya_puso, p):
     return min(p["tope"], c)
 
 
+# --- Calibración de los all-in (§1.9 R_paga y §2.8 rango de quien empuja) ---------------------------------
+# Medida con el historial local con las cartas de TODOS (pruebas/calibrar_allin.py, a 100 bb): qué manos paga y qué
+# manos empuja cada bot. Se aplica SOLO en modo profundo (los all-in cortos de push/fold son otro juego) y con
+# shrinkage hacia lo actual: p = (k + s·p_actual)/(n + s) por fuente. Apagada por defecto (calibracion_allin.activa).
+
+_GRUPO_DE_TIPO = {"tag": "tag", "station": "station", "aleatorio": "aleatorio"}      # nit y maníaco no tienen datos
+
+
+def calibracion_activa(params, profundo):
+    cal = params.get("calibracion_allin") or {}
+    return bool(cal.get("activa")) and bool(profundo)
+
+
+def fuentes_calibracion(params, bot, pi):
+    """[(peso, datos)]: un bot del kit RECONOCIDO usa sus propios datos; si no, los grupos de tipo con datos, ponderados
+    por la creencia π (lo que π reparte entre tipos sin datos —nit, maníaco— no se calibra: se queda en lo actual)."""
+    cal = params["calibracion_allin"]
+    if bot is not None and bot in cal["bots"]:
+        return [(1.0, cal["bots"][bot])]
+    out = []
+    for tipo, w in (pi or {}).items():
+        g = _GRUPO_DE_TIPO.get(tipo)
+        if g and g in cal["grupos"] and w > 0:
+            out.append((w, cal["grupos"][g]))
+    return out
+
+
+def mezcla_con_prior(p0, fuentes_nk, s):
+    """Σ_t π_t·(k_t + s·p0)/(n_t + s) + (peso no cubierto)·p0. `fuentes_nk`: [(peso, n, k)]."""
+    cubierto = sum(w for w, _, _ in fuentes_nk)
+    p = max(0.0, 1.0 - cubierto) * p0
+    for w, n, k in fuentes_nk:
+        p += w * (k + s * p0) / (n + s)
+    return p
+
+
+def c_calibrada(c0, es_preflop, bot, pi, params):
+    """P(el rival paga un all-in) calibrada: `c0` es lo que da el modelo (§1.7/§3.3) y se encoge hacia lo medido."""
+    cal = params["calibracion_allin"]
+    clave = "pre" if es_preflop else "post"
+    fuentes = [(w, f["paga"][clave][0], f["paga"][clave][1]) for w, f in fuentes_calibracion(params, bot, pi)]
+    return min(0.98, max(0.0, mezcla_con_prior(c0, fuentes, cal["s"])))
+
+
+def corte_empuje_preflop(bot, pi, params):
+    """Top-% de manos (de 100) al que se recorta el rango preflop de quien hizo all-in: el que contiene el 90 % de los
+    all-in medidos de ese bot/tipo, con shrinkage hacia 100 (= sin recorte, lo actual). 100 si no hay datos."""
+    cal = params["calibracion_allin"]
+    cubierto, t = 0.0, 0.0
+    for w, f in fuentes_calibracion(params, bot, pi):
+        e = f["empuja_pre"]
+        if e["n"] and e["q90"] is not None:
+            cubierto += w
+            t += w * (e["n"] * e["q90"] + cal["s"] * 100.0) / (e["n"] + cal["s"])
+    return t + max(0.0, 1.0 - cubierto) * 100.0
+
+
+def recortar_a_top(rango, pct):
+    """Deja solo los combos de las clases del top `pct` %; si no queda nada se conserva el rango."""
+    if pct >= 99.5 or rango.vacio():
+        return rango
+    top = set(R.clases_top(pct))
+    out = [(c, w) for c, w in zip(rango.combos, rango.pesos) if R.clase_de_combo(*c) in top]
+    return R.Rango(out) if out else rango
+
+
+def tabla_empuje_postflop(tabla0, enfrentaba, bot, pi, params):
+    """P(all-in | categoría) calibrada para el reajuste de §2.1: cada celda se encoge hacia la de `tabla0`."""
+    cal = params["calibracion_allin"]
+    ctx = "faced" if enfrentaba else "libre"
+    fuentes = fuentes_calibracion(params, bot, pi)
+    out = {}
+    for cat, p0 in tabla0.items():
+        nk = [(w, f["empuja_post"][ctx][cat][0], f["empuja_post"][ctx][cat][1]) for w, f in fuentes]
+        out[cat] = max(1e-4, mezcla_con_prior(p0, nk, cal["s"]))
+    return out
+
+
 # --- §2.2 Plantillas ----------------------------------------------------------------------
 
 def _fila(params, tipo):
@@ -337,12 +415,14 @@ def tabla_de_accion(tipo, enfrentaba, plantilla, pa):
     return None
 
 
-def rango_de_rival(rival_id, posicion, eventos_todos, board, mano_bender, params, cache, pi=None, expl=None):
+def rango_de_rival(rival_id, posicion, eventos_todos, board, mano_bender, params, cache, pi=None, expl=None, profundo=False):
     """Rango vivo de un rival en la mano actual: preflop según lo que hizo y, calle
     por calle, reajustado con sus acciones (§2.1) y sin los combos bloqueados.
-    `expl`: lectura de explotación (ρ, bot reconocido, tipo dominante); ver rango_preflop."""
+    `expl`: lectura de explotación (ρ, bot reconocido, tipo dominante); ver rango_preflop.
+    `profundo`: Bender está en modo profundo; solo entonces rige la calibración de los all-in (pruebas/calibrar_allin.py)."""
     pi = pi or params["capa1"]["pi_defecto"]
     bot = expl.get("bot") if expl else None
+    cal = calibracion_activa(params, profundo)
     plantilla = plantilla_mezcla(pi, params, bot)
     pa = prob_apuesta(pi, params, bot)
     piso = params["rango"]["piso"]
@@ -353,6 +433,9 @@ def rango_de_rival(rival_id, posicion, eventos_todos, board, mano_bender, params
     n_sub = sum(1 for e in propios if e[1] == "preflop" and e[2] in APUESTAS)
     n_pag = sum(1 for e in propios if e[1] == "preflop" and e[2] == "call")
     r = rango_preflop(n_sub, n_pag, posicion, params, expl)
+    if cal and any(e[1] == "preflop" and e[2] == "allin" for e in propios):
+        # §2.8 calibrado: quien empuja all-in preflop a 100 bb lo hace con una parte mucho más estrecha que "quien sube"
+        r = recortar_a_top(r, corte_empuje_preflop(bot, pi, params))
 
     for calle in ("flop", "turn", "river"):
         n = CARTAS_DE_CALLE[calle]
@@ -366,6 +449,8 @@ def rango_de_rival(rival_id, posicion, eventos_todos, board, mano_bender, params
             if sin_credito and enfrentaba and tipo in ("raise", "allin", "bet"):
                 continue
             tabla = tabla_de_accion(tipo, enfrentaba, plantilla, pa)
+            if cal and tipo == "allin" and tabla is not None:
+                tabla = tabla_empuje_postflop(tabla, enfrentaba, bot, pi, params)      # P(all-in | categoría) medida
             if tabla is not None and not r.vacio():
                 r = reajustar(r, board_calle, tabla, cache, piso)
     return r.filtrar(C.mascara(list(mano_bender) + list(board)))

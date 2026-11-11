@@ -10,6 +10,8 @@ parámetro mal escrito no debe ignorarse en silencio).
 import copy
 import json
 
+from calibracion_allin import CALIBRACION_ALLIN      # datos medidos por pruebas/calibrar_allin.py
+
 PARAMS = {
     # --- §1.2 Reloj adaptativo --------------------------------------------------
     "reloj": {
@@ -50,7 +52,12 @@ PARAMS = {
         "solo_valor_sobre_apuesta": True,     # subir sobre una apuesta ajena solo si e' >= umbral_valor
     },
     # --- §1.12 Perilla de riesgo del torneo ---------------------------------------
-    "riesgo": {"delta_max": 0.08, "g": 0.0},   # g=0 por ahora (lo define la Capa 3)
+    "riesgo": {"delta_max": 0.08, "g": 0.0,    # g=0 por ahora (lo define la Capa 3)
+               # §1.13 Utilidad con colchón: u(S) = ln(S + K), S = fichas detrás de Bender tras la mano. Con `utilidad` True
+               # se elige la acción de mayor UTILIDAD ESPERADA (mismo árbol que el EV); False = el EV en fichas de siempre.
+               # K es el "colchón": con K → ∞ la utilidad se vuelve lineal y se recupera el EV; K chico = más aversión
+               # a quedar sin fichas. Valor inicial 10 000 (un stack inicial); se elige con la métrica del campeonato.
+               "utilidad": False, "K": 10_000},
     # --- §2.1 Rango ---------------------------------------------------------------
     "rango": {"piso": 0.02},
     # --- §2.2 Plantillas (ret, paga, sube) por categoría --------------------------
@@ -173,6 +180,11 @@ PARAMS = {
         "contra_bots": True,     # §3.4: plantilla propia del bot del kit reconocido (huella >= 0,9)
         "chen_base": True,       # §3.4: rango preflop exacto de `base` (puntuación de Chen) cuando se lo reconoce
     },
+    # --- Calibración de los all-in (§1.9 R_paga y §2.8 rango de quien empuja) ----------------
+    # Qué manos paga y qué manos empuja cada bot en un all-in, medido con el historial local con las cartas de todos
+    # (pruebas/calibrar_allin.py escribe calibracion_allin.py). Solo rige en modo profundo (stack efectivo > 25 bb) y
+    # con shrinkage hacia lo actual: p = (k + s·p_actual)/(n + s). `activa` False = el modelo de siempre.
+    "calibracion_allin": {"activa": False, "s": 20.0, **CALIBRACION_ALLIN},
     # --- Solo pruebas -------------------------------------------------------------
     "debug": {"retardo_s": 0.0},   # pausa artificial por decisión (para poder matar a Bender a mitad de mesa)
     # --- Capa 1: opciones que el .tex no fija (extensiones propias) -----------------

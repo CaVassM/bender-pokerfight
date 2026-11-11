@@ -343,6 +343,40 @@ $g$ & Entre $-0{,}5$ y $1$. Positivo si Bender va cómodo en el top 6 y quedan p
 \uso{Solo afecta los calls que ponen en riesgo gran parte del stack: quedar en 0 elimina, y clasifican los 6 con más fichas.}
 \end{formbox}
 
+\subsection{Utilidad con colchón}
+\begin{formbox}{Maximizar utilidad, no fichas}
+\[
+u(S)=\ln(S+K)
+\qquad
+a^{*}=\arg\max_{a\ \text{no descartada}} U(a)
+\]
+\begin{params}
+$S$ & Fichas que le quedan \textbf{detrás} a Bender cuando acaba la mano (sin contar lo que hay en el pozo). \\
+$K$ & El \emph{colchón}: cuántas fichas "regaladas" se suman a $S$. Con $K\to\infty$ la utilidad es lineal y se recupera el EV; con $K$ chico, quedar sin fichas pesa mucho. Valor inicial $10\,000$ (un stack inicial). \emph{Provisional}: se elige con la métrica del campeonato. \\
+\end{params}
+\[
+\begin{aligned}
+U(\text{retirarse}) &= u(S)\\
+U(\text{pasar}) &= e\,u(S+P)+(1-e)\,u(S)\\
+U(\text{igualar }C) &= e\,u(S+P)+(1-e)\,u(S-C)\\
+U(\text{apostar }A) &= f\,u(S+P)+(1-f)\big[e'(x)\,u(S+P+A')+(1-e'(x))\,u(S-A)\big]
+\end{aligned}
+\]
+\par\noindent{\small Es \textbf{el mismo árbol} de §1.6--§1.9, con $f$, $e$, $e'(x)$, $P$, $A$ y $A'$ idénticos; solo cambia cómo se valora cada hoja. En el call corto se iguala con $c_{\text{ef}}=\min(C,S)$ y lo no cubierto vuelve a su dueño (como en §1.6), y $A$ es lo que de verdad pone Bender (con tope de lo que el rival puede cubrir, como en §1.9).}
+\begin{params}
+Equivalente cierto & $EC(a)=(S+K)\big(e^{\,U(a)-u(S)}-1\big)$: las fichas que, ganadas con certeza, valdrían lo mismo que $U(a)$. Es $0$ para retirarse y se parece al EV cuando el riesgo es chico. Con la utilidad activa, la \textbf{mezcla} de §1.11 compara $EC_1-EC_2<0{,}02\,\max(P,\mathrm{bb})$ y $EC_2\ge0$ (en vez de $EV$). \\
+Qué no cambia & Las fórmulas de EV de §1.6--§1.9 (se siguen calculando y registrando), los descartes de §1.11 y los filtros de §3.4. La perilla $\delta$ de §1.12 no entra en $U$: con la utilidad activa $g$ se queda en $0$. \\
+\end{params}
+\uso{Como $u$ es cóncava, poner el stack entero en una moneda al aire rinde menos utilidad que su EV en fichas. Un all-in contra un rival que paga siempre ($f=0$, $P\approx0$, $A=A'=S$) deja $\ln(2S+K)$ si gana y $\ln K$ si pierde, y retirarse deja $\ln(S+K)$: conviene solo si
+$e\ge e_{\min}^{u}=\ln\!\frac{S+K}{K}\Big/\ln\!\frac{2S+K}{K}$ (en fichas bastaría $e\ge50\,\%$).}
+\begin{center}\small\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}lcccc@{}}\toprule
+$K$ & 5\,000 & 10\,000 & 20\,000 & 40\,000\\ \midrule
+Equity mínima de un all-in de $S=10\,000$ a cara o cruz & 68{,}3\,\% & 63{,}1\,\% & 58{,}5\,\% & 55{,}0\,\%\\ \bottomrule
+\end{tabular}\end{center}
+\ej{$S=10\,000$, $K=10\,000$, all-in sin fold equity con $e'=0{,}55$: $EV=0{,}55\cdot20\,000-10\,000=+1\,000$, pero $U=0{,}55\ln30\,000+0{,}45\ln10\,000\approx9{,}815<\ln20\,000\approx9{,}903=u(S)$, o sea $EC<0$: se retira (o juega una apuesta menor). Con $e'=0{,}64$ ya conviene.}
+\end{formbox}
+
 % =====================================================================
 \clearpage
 \section{Capa 2 · Lectura de rivales}
@@ -570,6 +604,7 @@ Mezcla & 2\,\% del pozo / 0{,}35 & Aleatorizar empates de EV (§1.11) \\
 Reglas de solo valor & ambas activas & All-in profundo y subir sobre apuesta (§1.11) \\
 Estrechar por re-subida & $\times0{,}45$ & Rango preflop (§2.8) \\
 $\delta_{\max}$ & 0{,}08 & Perilla de riesgo (§1.12) \\
+$K$ (colchón) & 10\,000 (utilidad apagada por defecto) & Utilidad $\ln(S+K)$ (§1.13) \\
 Piso de rango & 0{,}02 & Reajuste del rango (§2.1) \\
 Plantillas & tabla §2.2 & Rango y $c$ (§2.1) \\
 Prior de tipos & .06/.53/.18/.06/.17 & Bayes (§2.3) \\
