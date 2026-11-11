@@ -54,18 +54,29 @@ PARAMS = {
     # --- §2.1 Rango ---------------------------------------------------------------
     "rango": {"piso": 0.02},
     # --- §2.2 Plantillas (ret, paga, sube) por categoría --------------------------
-    # "promedio" es también la fila del TAG.
+    # CALIBRADAS con el historial de 4 800 manos de 6 bots en una mesa (pruebas/calibrar_plantillas.py):
+    #   "promedio" (= la fila del TAG) con base, estadistico, bandido y espia; "station" con conservador.
+    # Shrinkage hacia la plantilla del .tex con s = 20 por fila. nit, maníaco y aleatorio NO se tocan (no hay
+    # bots así en el kit). Los valores del .tex están en PLANTILLAS_TEX (prior del shrinkage y de los tests).
+    # Ojo con "station": el conservador se retira ~56 % de las veces ante una apuesta SIN MIRAR su mano (paga
+    # barato y se retira ante lo caro): la plantilla por categoría es casi plana; lo que lo distingue es el
+    # tamaño de la apuesta (estadísticas "sigue chica/grande", §3.3).
     "plantillas": {
-        "promedio": {"fuerte": [.05, .55, .40], "media": [.35, .60, .05], "proyecto": [.25, .60, .15], "aire": [.85, .07, .08]},
+        "promedio": {"fuerte": [.143, .513, .344], "media": [.289, .660, .051], "proyecto": [.572, .413, .015], "aire": [.755, .241, .003]},
         "nit":      {"fuerte": [.05, .65, .30], "media": [.50, .48, .02], "proyecto": [.55, .42, .03], "aire": [.93, .05, .02]},
-        "station":  {"fuerte": [.02, .88, .10], "media": [.10, .88, .02], "proyecto": [.10, .85, .05], "aire": [.30, .68, .02]},
+        "station":  {"fuerte": [.552, .445, .004], "media": [.562, .437, .0], "proyecto": [.542, .454, .004], "aire": [.56, .439, .0]},
         "maniaco":  {"fuerte": [.02, .38, .60], "media": [.15, .55, .30], "proyecto": [.10, .45, .45], "aire": [.40, .25, .35]},
         "aleatorio": {c: [1 / 3, 1 / 3, 1 / 3] for c in ("fuerte", "media", "proyecto", "aire")},
     },
-    # P(apuesta | categoría) cuando nadie apostó (rival promedio) y su multiplicador por tipo
+    # P(apuesta | categoría) cuando nadie apostó. "base" y "mult" (valores del .tex) siguen dando nit, maníaco y
+    # el promedio de los tipos sin dato propio; "por_tipo" fija los calibrados (TAG y station).
     "prob_apuesta": {
         "base": {"fuerte": .65, "media": .35, "proyecto": .45, "aire": .25},
         "mult": {"nit": 0.7, "station": 0.6, "maniaco": 1.5, "tag": 1.0},
+        "por_tipo": {
+            "tag":     {"fuerte": .898, "media": .543, "proyecto": .22, "aire": .19},
+            "station": {"fuerte": .016, "media": .005, "proyecto": .029, "aire": .002},
+        },
         "tope": 0.95,
         "aleatorio": 0.50,
     },
@@ -154,6 +165,15 @@ PARAMS = {
         "keepalive_s": 60,
     },
 }
+
+
+# Valores PROVISIONALES de las plantillas de §2.2 tal como venían en el .tex antes del paso 4+ (prior del
+# shrinkage de calibrar_plantillas.py y referencia de los tests del ejemplo numérico de §2.1).
+PLANTILLAS_TEX = {
+    "promedio": {"fuerte": [.05, .55, .40], "media": [.35, .60, .05], "proyecto": [.25, .60, .15], "aire": [.85, .07, .08]},
+    "station":  {"fuerte": [.02, .88, .10], "media": [.10, .88, .02], "proyecto": [.10, .85, .05], "aire": [.30, .68, .02]},
+}
+PROB_APUESTA_TEX = {"fuerte": .65, "media": .35, "proyecto": .45, "aire": .25}
 
 
 def _mezclar(base, extra, ruta=""):

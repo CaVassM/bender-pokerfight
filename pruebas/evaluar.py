@@ -38,7 +38,9 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 BIN = os.path.join(RAIZ, "bin")
 EXE = ".exe" if os.name == "nt" else ""
 BENDER_MAIN = os.path.join(RAIZ, "bender", "main.py")
-SALIDAS = os.path.join(RAIZ, "bender", "pruebas", "salidas")
+# Las salidas van a BENDER_SALIDAS si existe (lo pone evaluar_fijo.py para que todas las evaluaciones, aunque corran
+# desde worktrees de commits distintos, compartan carpeta y se puedan comparar con --comparar).
+SALIDAS = os.environ.get("BENDER_SALIDAS") or os.path.join(RAIZ, "bender", "pruebas", "salidas")
 ENTRENAMIENTO = ["aleatorio", "conservador", "base", "estadistico", "bandido", "espia"]
 RESERVA = ["darwin", "novato"]
 BB = 100
@@ -94,13 +96,14 @@ def archivo_params(dir_salida, params_usuario):
     return ruta
 
 
-def params_corrida(ruta_base, dir_run):
+def params_corrida(ruta_base, dir_run, memoria_dir=None):
     """Copia de los parámetros de la evaluación con la memoria de rivales (Capa 2) en la carpeta de ESTA
     corrida: ni las mesas en paralelo ni dos evaluaciones se pisan, y no hay "memoria heredada" entre
-    corridas (cada mesa de evaluación empieza sin conocer a nadie, como la primera ronda del torneo)."""
+    corridas (cada mesa de evaluación empieza sin conocer a nadie, como la primera ronda del torneo).
+    Con `memoria_dir` (campañas) la memoria se comparte entre mesas consecutivas a propósito."""
     with open(ruta_base, encoding="utf-8") as f:
         p = json.load(f)
-    p.setdefault("rivales", {})["dir"] = os.path.join(dir_run, "rivales")
+    p.setdefault("rivales", {})["dir"] = memoria_dir or os.path.join(dir_run, "rivales")
     ruta = os.path.join(dir_run, "params-bender.json")
     with open(ruta, "w", encoding="utf-8") as f:
         json.dump(p, f)
@@ -158,10 +161,10 @@ def leer_hu(ruta, duracion):
 
 # --- Vía 2: mesas de 5 con bin/mesa --------------------------------------------------------------------------
 
-def correr_mesa(indice, rivales, orden, rondas, puerto, dir_run, ruta_params):
+def correr_mesa(indice, rivales, orden, rondas, puerto, dir_run, ruta_params, memoria_dir=None):
     """Una mesa: Bender + 4 rivales, conectados en el orden `orden` (rota los asientos)."""
     os.makedirs(dir_run, exist_ok=True)
-    ruta_params = params_corrida(ruta_params, dir_run)
+    ruta_params = params_corrida(ruta_params, dir_run, memoria_dir)
     procesos, archivos = [], []
 
     def lanzar(comando, nombre, env=None):
@@ -307,7 +310,8 @@ def main():
     dir_eval = os.path.join(SALIDAS, f"eval-{args.etiqueta}")
     os.makedirs(dir_eval, exist_ok=True)
     ruta_params = archivo_params(dir_eval, args.params)
-    resultado = {"etiqueta": args.etiqueta, "params": args.params, "rivales": rivales, "semillas": args.semillas,
+    resultado = {"etiqueta": args.etiqueta, "commit": os.environ.get("BENDER_COMMIT"), "params": args.params,
+                 "rivales": rivales, "semillas": args.semillas,
                  "semilla_base": args.semilla_base, "manos_hu": args.manos, "hu": {}, "mesa": {}}
     inicio = time.time()
 

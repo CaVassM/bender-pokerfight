@@ -71,7 +71,7 @@
 \vspace{6pt}
 
 \begin{notebox}\small
-\textbf{Cómo leer esta hoja.} Cada caja trae la fórmula, una tabla con cada parámetro y una línea de cómo usarla. Los valores marcados como \emph{provisional} son puntos de partida: se miden con los bots del kit y el servidor de pruebas, y se afinan en la Capa 3. Todas las cantidades de fichas se miden \textbf{desde la decisión actual}: lo que ya se puso en el pozo no cuenta (costo hundido), así que $EV(\text{retirarse}) = 0$ siempre.
+\textbf{Cómo leer esta hoja.} Cada caja trae la fórmula, una tabla con cada parámetro y una línea de cómo usarla. Los valores marcados como \emph{provisional} son puntos de partida: se miden con los bots del kit y el servidor de pruebas, y se afinan en la Capa 3. Los valores marcados como \emph{calibrado} ya se midieron con los 6 bots de entrenamiento del kit (paso 4); la versión vigente de cada número vive en \code{params.py}. Todas las cantidades de fichas se miden \textbf{desde la decisión actual}: lo que ya se puso en el pozo no cuenta (costo hundido), así que $EV(\text{retirarse}) = 0$ siempre.
 \end{notebox}
 
 \section*{0 · Notación común}
@@ -397,17 +397,17 @@ P(t\mid a)=\frac{P(a\mid t)\,P(t)}{\sum_{t'}P(a\mid t')\,P(t')}
 \log\pi_t \leftarrow \lambda\log\pi_t+\log P(a\mid t)
 \]
 \begin{params}
-$P(t)$ & Prior de población: nit .25, TAG .25, station .20, maníaco .15, aleatorio .15. \emph{Provisional}. \\
+$P(t)$ & Prior de población: nit .06, TAG .53, station .18, maníaco .06, aleatorio .17. \emph{Calibrado} con los bots del kit; se revisa con el servidor de pruebas. \\
 $P(a\mid t)$ & Verosimilitud de la acción para el tipo (tabla de abajo preflop; postflop, la plantilla de §2.2). \\
 $\pi_t$ & Posterior guardado por ID del rival, en disco. \\
 $\lambda$ & Olvido (§2.6). Con $\lambda=1$ es Bayes puro. \\
 \end{params}
 \begin{center}\small\renewcommand{\arraystretch}{1.18}
 \begin{tabular}{@{}lccccc@{}}\toprule
-Preflop, por mano & Nit & TAG & Station & Maníaco & Aleatorio\\ \midrule
-Se retira (F) & .88 & .78 & .45 & .35 & .33\\
-Entra pagando (C) & .04 & .06 & .50 & .15 & .33\\
-Entra subiendo (R) & .08 & .16 & .05 & .50 & .33\\ \bottomrule
+Preflop (TAG y station \emph{calibrados}) & Nit & TAG & Station & Maníaco & Aleatorio\\ \midrule
+Se retira (F) & .88 & .65 & .06 & .35 & .33\\
+Entra pagando (C) & .04 & .26 & .92 & .15 & .33\\
+Entra subiendo (R) & .08 & .09 & .02 & .50 & .33\\ \bottomrule
 \end{tabular}\end{center}
 \uso{Se trabaja en logaritmos (evita \emph{underflow}). Para normalizar: restar el máximo, exponenciar y dividir por la suma. Piso: ningún $\pi_t$ baja de 0{,}01.}
 \ej{Prior + “entra pagando”: station pasa de 20\,\% a 50{,}6\,\% en una mano.}
@@ -439,7 +439,7 @@ $P(a\mid h,t)$ & Plantilla del tipo $t$ para la categoría de $h$ (§2.2). \\
 \]
 \begin{params}
 $k,\ n$ & Veces que pasó lo que se mide / oportunidades observadas. \\
-$m$ & Promedio de la población (se mide en el servidor de pruebas). VPIP: 0{,}30 \emph{provisional}. \\
+$m$ & Promedio de la población (se mide en el servidor de pruebas). \emph{Calibrado}: VPIP 0{,}455, PFR 0{,}143, sigue ante apuesta chica 0{,}692, sigue ante grande 0{,}545. \\
 $s$ & Fuerza del prior, en manos imaginarias: 20 para VPIP y PFR. \emph{Provisional}. \\
 $\hat p$ & Estimado de la frecuencia. \\
 $\sigma$ & Incertidumbre del estimado: decide cuánto explotar (§3.2). \\
@@ -471,16 +471,17 @@ P(\text{bot}\mid z_1,\dots,z_n)\propto P(\text{bot})\prod_{i}P(z_i\mid \text{bot
 \begin{params}
 $z$ & Tamaño de cada apuesta postflop de un rival (misma cuenta que $x$). Cae en una caja si está a $\pm0{,}03$ de .33, .4, .5, .6, .66, .75, .9 o 1.0; si no, en “otro”. No se cuentan los all-in ni las apuestas recortadas por el stack. \\
 $P(\text{bot})$ & 0{,}5 para “propio” (bot escrito desde cero) y 0{,}1 para cada bot del kit. \\
-$P(z\mid\text{bot})$ & Tabla de abajo, estimada leyendo el código del kit. \emph{Provisional}: se mide corriendo los bots. “Propio” reparte $1/9$ en cada caja. \\
+$P(z\mid\text{bot})$ & Tabla de abajo, \emph{calibrada} midiendo cada bot en 90 mesas. $^{\dagger}$\code{novato} es de reserva y no se midió: conserva la estimación leída del código. \code{conservador} nunca apuesta y no tiene huella. “Propio” reparte $1/9$ en cada caja. \\
 \end{params}
 \begin{center}\small\renewcommand{\arraystretch}{1.15}
 \begin{tabular}{@{}lccccccccc@{}}\toprule
 Bot & .33 & .4 & .5 & .6 & .66 & .75 & .9 & 1.0 & otro\\ \midrule
-base & .01 & .40 & .01 & .01 & .01 & .52 & .01 & .01 & .02\\
-novato & .20 & .01 & .44 & .01 & .01 & .29 & .01 & .01 & .02\\
-espia & .01 & .01 & .44 & .24 & .01 & .01 & .14 & .12 & .02\\
-bandido & .01 & .01 & .44 & .01 & .29 & .01 & .01 & .20 & .02\\
-estadistico & .01 & .01 & .30 & .08 & .08 & .08 & .08 & .08 & .28\\ \bottomrule
+base & .01 & .77 & .06 & .01 & .01 & .11 & .01 & .01 & .01\\
+novato\,$^{\dagger}$ & .20 & .01 & .44 & .01 & .01 & .29 & .01 & .01 & .02\\
+espia & .01 & .01 & .33 & .47 & .01 & .01 & .10 & .06 & .01\\
+bandido & .01 & .01 & .34 & .01 & .57 & .01 & .01 & .04 & .01\\
+estadistico & .01 & .01 & .18 & .11 & .12 & .15 & .07 & .03 & .32\\
+aleatorio & .01 & .03 & .02 & .03 & .02 & .01 & .01 & .02 & .84\\ \bottomrule
 \end{tabular}\end{center}
 \uso{Si $P(\text{bot})\ge0{,}9$, Bender usa la contraestrategia de ese bot (§3.4). Si el equipo cambió los tamaños, el posterior se va a “propio” y no se rompe nada.}
 \ej{0{,}75, 0{,}4, 0{,}75 $\Rightarrow$ base con 93\,\%.}
@@ -571,7 +572,7 @@ Estrechar por re-subida & $\times0{,}45$ & Rango preflop (§2.8) \\
 $\delta_{\max}$ & 0{,}08 & Perilla de riesgo (§1.12) \\
 Piso de rango & 0{,}02 & Reajuste del rango (§2.1) \\
 Plantillas & tabla §2.2 & Rango y $c$ (§2.1) \\
-Prior de tipos & .25/.25/.20/.15/.15 & Bayes (§2.3) \\
+Prior de tipos & .06/.53/.18/.06/.17 & Bayes (§2.3) \\
 $m$, $s$ & medido / 20 & Shrinkage (§2.5) \\
 $\lambda$ & 0{,}98 & Olvido (§2.6) \\
 Umbral de huella & 0{,}9 & Bot reconocido (§2.7) \\

@@ -60,11 +60,14 @@ def prob_apuesta(pi, params):
     proyecto .45, aire .25 para el promedio; nit ×0,7, station ×0,6, maníaco ×1,5
     (tope .95); aleatorio .50 en todo."""
     pa = params["prob_apuesta"]
+    por_tipo = pa.get("por_tipo", {})
     out = {}
     for cat in (R.FUERTE, R.MEDIA, R.PROYECTO, R.AIRE):
         s = 0.0
         for tipo, w in pi.items():
-            if tipo == "aleatorio":
+            if tipo in por_tipo:                       # tipos calibrados con los bots del kit (TAG, station)
+                s += w * por_tipo[tipo][cat]
+            elif tipo == "aleatorio":
                 s += w * pa["aleatorio"]
             else:
                 s += w * min(pa["tope"], pa["base"][cat] * pa["mult"].get(tipo, 1.0))
@@ -94,7 +97,7 @@ def c_de_rango_preflop(rango, x, ya_puso, p):
     return min(0.98, dentro / rango.total)
 
 
-N_FUERZA = 64        # simulaciones por combo para estimar su equity contra una mano al azar (flop y turn)
+N_FUERZA = 96        # repartos por board (flop y turn) para estimar la equity de CUALQUIER combo contra una mano al azar
 
 
 class CacheCategorias:
@@ -104,7 +107,7 @@ class CacheCategorias:
     def __init__(self):
         self._d = {}
         self._f = {}
-        self._rng = {}
+        self._m = {}          # board -> repartos compartidos para estimar la fuerza de todos los combos
 
     def de(self, combo, board):
         clave = (combo, board)
@@ -115,41 +118,52 @@ class CacheCategorias:
 
     def fuerza(self, combo, board):
         """Fuerza del combo en ese board = su equity contra UNA MANO AL AZAR (§1.9: ordena el rango que
-        paga; el rival no conoce las cartas de Bender). River: exacta, monótona en el rank de la mano.
-        Flop y turn: Monte Carlo con N_FUERZA simulaciones y semilla fija por board (reproducible)."""
+        paga; el rival no conoce las cartas de Bender; solo depende del combo y del board).
+
+        River: exacta, monótona en el rank de la mano. Flop y turn: Monte Carlo sobre repartos
+        compartidos por board (ver `_repartos`). Se calcula una vez por (combo, board) y se reutiliza
+        para todos los rivales, tamaños y decisiones de esa calle."""
         clave = (combo, board)
         v = self._f.get(clave)
         if v is None:
             if len(board) == 5:
                 v = 1.0 - C.evaluar7(combo[0], combo[1], *board) / 7463.0
             else:
-                rng = self._rng.get(board)
-                if rng is None:
-                    rng = self._rng[board] = random.Random(hash(board) & 0xFFFFFFFF)
-                v = _equity_vs_azar(combo, board, rng, N_FUERZA)
+                v = self._fuerza_mc(combo, board)
             self._f[clave] = v
         return v
 
+    def _repartos(self, board):
+        """Repartos al azar compartidos para estimar la equity de TODOS los combos de un board: cada uno
+        es (máscara de las cartas usadas, board completo, rank de la mano rival). Se sortean una vez por
+        board (semilla fija: reproducible). Un combo usa los repartos que no chocan con sus cartas:
+        condicionar así deja una distribución uniforme sobre el resto de la baraja, o sea el mismo
+        estimador de siempre, pero cada combo cuesta 1 evaluación por reparto (antes 2 más el sorteo)."""
+        rep = self._m.get(board)
+        if rep is None:
+            rng = random.Random(hash(board) & 0xFFFFFFFF)
+            en_board = set(board)
+            mazo = [c for c in C.TODAS if c not in en_board]
+            faltan = 5 - len(board)
+            rep = []
+            for _ in range(N_FUERZA):
+                extra = rng.sample(mazo, faltan + 2)
+                completo = list(board) + extra[:faltan]
+                rep.append((C.mascara(extra), tuple(completo), C.evaluar7(extra[faltan], extra[faltan + 1], *completo)))
+            self._m[board] = rep
+        return rep
 
-def _equity_vs_azar(combo, board, rng, n):
-    """Equity de `combo` contra una mano al azar en un board de 3 o 4 cartas (Monte Carlo)."""
-    h1, h2 = combo
-    base = C.mascara(list(combo) + list(board))
-    faltan = 5 - len(board)
-    rnd, ev7, acum = rng.random, C.evaluar7, 0.0
-    for _ in range(n):
-        usadas, extra = base, []
-        for _ in range(faltan + 2):
-            c = int(rnd() * 52)
-            while (usadas >> c) & 1:
-                c = int(rnd() * 52)
-            usadas |= 1 << c
-            extra.append(c)
-        completo = list(board) + extra[:faltan]
-        mio = ev7(h1, h2, *completo)
-        rival = ev7(extra[faltan], extra[faltan + 1], *completo)
-        acum += 1.0 if mio < rival else (0.5 if mio == rival else 0.0)
-    return acum / n
+    def _fuerza_mc(self, combo, board):
+        a, b = combo
+        m = (1 << a) | (1 << b)
+        ev7, acum, n = C.evaluar7, 0.0, 0
+        for mask, completo, rank_rival in self._repartos(board):
+            if mask & m:
+                continue
+            r = ev7(a, b, *completo)
+            acum += 1.0 if r < rank_rival else (0.5 if r == rank_rival else 0.0)
+            n += 1
+        return acum / n if n else 0.5
 
 
 def rango_de_pago_por_fuerza(rango, board, frac, cache):

@@ -1,0 +1,206 @@
+{
+ "manos": 4800,
+ "s": 20.0,
+ "grupos": {
+  "tag": {
+   "cuentas": {
+    "faced": {
+     "fuerte": [
+      102,
+      358,
+      239
+     ],
+     "media": [
+      208,
+      479,
+      37
+     ],
+     "proyecto": [
+      110,
+      71,
+      0
+     ],
+     "aire": [
+      1067,
+      345,
+      3
+     ]
+    },
+    "libre": {
+     "fuerte": [
+      155,
+      1412
+     ],
+     "media": [
+      750,
+      901
+     ],
+     "proyecto": [
+      318,
+      84
+     ],
+     "aire": [
+      2515,
+      587
+     ]
+    }
+   },
+   "plantilla": {
+    "fuerte": [
+     0.143,
+     0.513,
+     0.344
+    ],
+    "media": [
+     0.289,
+     0.66,
+     0.051
+    ],
+    "proyecto": [
+     0.572,
+     0.413,
+     0.015
+    ],
+    "aire": [
+     0.755,
+     0.241,
+     0.003
+    ]
+   },
+   "prob_apuesta": {
+    "fuerte": 0.898,
+    "media": 0.543,
+    "proyecto": 0.22,
+    "aire": 0.19
+   },
+   "plantilla_anterior": {
+    "fuerte": [
+     0.05,
+     0.55,
+     0.4
+    ],
+    "media": [
+     0.35,
+     0.6,
+     0.05
+    ],
+    "proyecto": [
+     0.25,
+     0.6,
+     0.15
+    ],
+    "aire": [
+     0.85,
+     0.07,
+     0.08
+    ]
+   },
+   "prob_apuesta_anterior": {
+    "fuerte": 0.65,
+    "media": 0.35,
+    "proyecto": 0.45,
+    "aire": 0.25
+   }
+  },
+  "station": {
+   "cuentas": {
+    "faced": {
+     "fuerte": [
+      297,
+      222,
+      0
+     ],
+     "media": [
+      449,
+      333,
+      0
+     ],
+     "proyecto": [
+      121,
+      86,
+      0
+     ],
+     "aire": [
+      902,
+      698,
+      0
+     ]
+    },
+    "libre": {
+     "fuerte": [
+      468,
+      0
+     ],
+     "media": [
+      783,
+      0
+     ],
+     "proyecto": [
+      166,
+      0
+     ],
+     "aire": [
+      1345,
+      0
+     ]
+    }
+   },
+   "plantilla": {
+    "fuerte": [
+     0.552,
+     0.445,
+     0.004
+    ],
+    "media": [
+     0.562,
+     0.437,
+     0.0
+    ],
+    "proyecto": [
+     0.542,
+     0.454,
+     0.004
+    ],
+    "aire": [
+     0.56,
+     0.439,
+     0.0
+    ]
+   },
+   "prob_apuesta": {
+    "fuerte": 0.016,
+    "media": 0.005,
+    "proyecto": 0.029,
+    "aire": 0.002
+   },
+   "plantilla_anterior": {
+    "fuerte": [
+     0.02,
+     0.88,
+     0.1
+    ],
+    "media": [
+     0.1,
+     0.88,
+     0.02
+    ],
+    "proyecto": [
+     0.1,
+     0.85,
+     0.05
+    ],
+    "aire": [
+     0.3,
+     0.68,
+     0.02
+    ]
+   },
+   "prob_apuesta_anterior": {
+    "fuerte": 0.39,
+    "media": 0.21,
+    "proyecto": 0.27,
+    "aire": 0.15
+   }
+  }
+ }
+}

@@ -9,7 +9,31 @@ import rangos as R
 from estado import Jugador
 from params import cargar_params
 
+from params import PLANTILLAS_TEX, PROB_APUESTA_TEX  # noqa: E402
+
+PC = cargar_params()                      # parámetros vigentes (plantillas CALIBRADAS)
+# Los ejemplos numéricos del .tex (c = 0,37, "aire 66 % → 19 %"...) están escritos con las plantillas
+# PROVISIONALES: estas pruebas usan esos valores, que se conservan en params.PLANTILLAS_TEX.
 P = cargar_params()
+P["plantillas"].update({k: v for k, v in PLANTILLAS_TEX.items()})
+P["prob_apuesta"]["base"] = dict(PROB_APUESTA_TEX)
+P["prob_apuesta"]["por_tipo"] = {}
+
+
+def test_las_plantillas_calibradas_son_distribuciones_y_reflejan_a_los_bots_del_kit():
+    for tipo in ("promedio", "station"):
+        for cat, fila in PC["plantillas"][tipo].items():
+            assert abs(sum(fila) - 1.0) < 0.01, (tipo, cat, fila)
+    tag = PC["plantillas"]["promedio"]
+    assert tag["aire"][2] < 0.02                                   # el TAG casi nunca sube con aire
+    assert tag["fuerte"][0] < tag["proyecto"][0] < tag["aire"][0]  # se retira más cuanto más débil
+    pa = POB.prob_apuesta({"tag": 1.0}, PC)
+    assert pa["fuerte"] > 0.8 and pa["aire"] < 0.3
+    st = POB.prob_apuesta({"station": 1.0}, PC)
+    assert max(st.values()) < 0.05                                 # el conservador nunca apuesta
+    # El station medido se retira igual con cualquier mano (paga barato, no mira sus cartas)
+    rets = [PC["plantillas"]["station"][c][0] for c in ("fuerte", "media", "proyecto", "aire")]
+    assert max(rets) - min(rets) < 0.05
 
 
 def cs(t):
