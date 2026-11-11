@@ -68,6 +68,9 @@ def resumen_ic(xs):
 
 
 def comando_rival(nombre, puerto, token):
+    if nombre == "novato":                      # bot de Python: no tiene binario en bin/
+        return [sys.executable, os.path.join(RAIZ, "bots", "novato", "bot.py"), "-addr", f"127.0.0.1:{puerto}",
+                "-token", token, "-silencioso"]
     extra = {"estadistico": ["-simulaciones", "2000"], "bandido": ["-silencioso"], "espia": ["-silencioso"],
              "darwin": ["-silencioso"]}.get(nombre, [])
     return [os.path.join(BIN, nombre + EXE), "-addr", f"127.0.0.1:{puerto}", "-token", token] + extra
