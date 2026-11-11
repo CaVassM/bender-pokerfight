@@ -45,6 +45,9 @@ PARAMS = {
         "compromiso_fraccion": 1 / 3,   # modo intermedio: tope de stack por call/subida
         "mezcla_ev_frac": 0.02,      # |EV1-EV2| < 0,02·max(P, bb) activa la mezcla
         "mezcla_prob": 0.35,         # probabilidad de elegir la segunda mejor
+        # --- Variantes de regla que NO están en el .tex (apagadas = comportamiento del .tex) ---
+        "allin_profundo_solo_valor": False,   # en modo profundo, el all-in se descarta si e' < umbral_valor
+        "solo_valor_sobre_apuesta": False,    # subir sobre una apuesta ajena solo si e' >= umbral_valor
     },
     # --- §1.12 Perilla de riesgo del torneo ---------------------------------------
     "riesgo": {"delta_max": 0.08, "g": 0.0},   # g=0 por ahora (lo define la Capa 3)
@@ -106,6 +109,18 @@ PARAMS = {
     "explotacion": {"kappa": 1.0, "rho_max": 0.8, "n_min": 8, "tau": 0.7},
     # --- Solo pruebas -------------------------------------------------------------
     "debug": {"retardo_s": 0.0},   # pausa artificial por decisión (para poder matar a Bender a mitad de mesa)
+    # --- Capa 1: opciones que el .tex no fija (extensiones propias) -----------------
+    "capa1": {
+        "activa": True,              # False = la "versión Capa 0" (solo check/fold), para comparar
+        "rangos_poblacion": True,   # False = equity contra mano al azar (ablación: "Capa 1 sin rangos")
+        "pi_defecto": {"tag": 1.0},  # tipo de rival sin datos: la fila "Promedio / TAG" de §2.2
+        "estrecha_por_subida": 0.45,  # cada re-subida preflop reduce el top % del rival a este factor
+        "min_pct_rango": 3.0,        # el rango de un re-subidor nunca baja de este top %
+        "pct_bb_sin_posicion": 20.0,  # top % de quien sube desde una ciega grande (no está en §1.5)
+        "semilla": None,             # None = azar del sistema; un entero hace reproducible la mezcla y el Monte Carlo
+    },
+    # --- Registro -----------------------------------------------------------------
+    "registro": {"mensajes": True},  # False = no guarda cada mensaje crudo (corridas largas de evaluación)
     # --- Conexión (no viene del .tex) ---------------------------------------------
     "conexion": {
         "inicial_s": 60.0,        # cuánto reintentar la primera conexión

@@ -1,14 +1,15 @@
 """Bender · el manejador de mensajes (une la conexión con la estrategia).
 
-Paso 1 (Capa 0): la estrategia es solo check/fold, pero todo el circuito está
-completo: interpreta el estado, lleva la cuenta de la mesa y de la mano,
-registra cada decisión con su tiempo y N, y nunca se cae (toda decisión va en
-try/except con la acción segura de respaldo, en conexion.Cliente._decidir).
-Las capas 1 y 2 se enchufan en `_estrategia`.
+Interpreta el estado, lleva la cuenta de la mesa y de la mano, decide con la
+Capa 1 (capa1.py), registra cada decisión con su tabla de EV, su tiempo y su N, y
+nunca se cae: toda decisión va en try/except con la acción segura de respaldo
+(aquí y en conexion.Cliente._decidir). La Capa 2 se enchufa en `_estrategia`.
 """
 
 import time
+import traceback
 
+from capa1 import Capa1
 from estado import (EstadoPublico, SeguimientoMesa, Turno, accion_segura, carta_de_dict,
                     texto_cartas)
 
@@ -20,6 +21,7 @@ class Bender:
         self.mi_id = None
         self.silla = -1
         self.mesa = SeguimientoMesa()
+        self.capa1 = Capa1(params)
 
     # --- Conexión ---
     def al_conectar(self, id_jugador, silla, reconexion):
@@ -56,6 +58,7 @@ class Bender:
         validas = mensaje.get("acciones_validas") or []
         self.mesa.ultimo_estado = estado
 
+        info = {}
         if not self.mesa.tengo_cartas(estado):
             # Reconexión a mitad de mano (o mano_inicio perdido): sin cartas no
             # se puede decidir nada con criterio.
@@ -63,20 +66,27 @@ class Bender:
             turno = Turno(estado, self.mi_id, [], validas, mensaje.get("timeout_ms", 0))
         else:
             turno = Turno(estado, self.mi_id, self.mesa.mano, validas, mensaje.get("timeout_ms", 0))
-            accion, motivo = self._estrategia(turno)
+            try:
+                accion, motivo, info = self._estrategia(turno)
+            except Exception:
+                # Un fallo de la estrategia no puede tumbar la decisión: acción segura + traza en el log.
+                self.registro.escribir("error", donde="estrategia", traza=traceback.format_exc())
+                accion, motivo, info = accion_segura(validas), "error en la estrategia: acción segura", {}
 
-        # N y tiempo de cada decisión (pedido por el equipo): n_sim se llena
-        # cuando exista el Monte Carlo (paso 2); en la Capa 0 es 0.
+        # N y tiempo de cada decisión: n_sim suma las simulaciones de e y de e'.
+        n_sim = info.get("equity", {}).get("n", 0) + sum(r["n"] for r in info.get("equities_si_pagan", []))
         self.registro.escribir(
             "decision", id_mano=estado.id_mano, etapa=estado.etapa, cartas=texto_cartas(turno.mano),
             mesa=texto_cartas(estado.comunitarias), posicion=turno.mi_posicion,
             P=turno.P, C=turno.C, apuesta_actual=estado.apuesta_actual, saldo=turno.yo.saldo,
             s_ef_bb=round(turno.stack_efectivo_bb(), 1), rivales=len(turno.rivales),
-            validas=validas, accion=accion, motivo=motivo,
-            n_sim=0, tiempo_s=round(time.perf_counter() - inicio, 4),
+            validas=validas, accion=accion, motivo=motivo, info=info,
+            n_sim=n_sim, tiempo_s=round(time.perf_counter() - inicio, 4),
         )
         return accion
 
     def _estrategia(self, turno):
-        """Paso 1: solo check/fold. Aquí se enchufa capa1.decidir en el paso 3."""
-        return turno.pasar_o_retirarse(), "Capa 0: solo check/fold"
+        """Capa 1 (capa1.py), o solo check/fold si `capa1.activa` es False (la "versión Capa 0")."""
+        if not self.params["capa1"]["activa"]:
+            return turno.pasar_o_retirarse(), "Capa 0: solo check/fold", {}
+        return self.capa1.decidir(turno, self.mesa)

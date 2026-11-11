@@ -134,6 +134,7 @@ class Cliente:
     def __init__(self, direccion, token, manejador, params, registro):
         host, puerto = direccion.rsplit(":", 1)
         self.cfg = params["conexion"]
+        self.log_mensajes = params["registro"]["mensajes"]
         self.conexion = Conexion(host or "127.0.0.1", int(puerto), token, self.cfg)
         self.manejador = manejador
         self.registro = registro
@@ -210,7 +211,8 @@ class Cliente:
 
             tipo = mensaje.get("tipo")
             self._ultimo_tipo = tipo
-            self.registro.escribir("msg", msg=mensaje)
+            if self.log_mensajes:
+                self.registro.escribir("msg", msg=mensaje)
 
             if tipo == "solicitar_accion":
                 accion = self._decidir(mensaje)
