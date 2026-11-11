@@ -38,6 +38,15 @@ contraestrategia por bot (plantilla medida; Chen para `base`; `conservador` por 
 | 20 | §3.3 θ | Se mezcla (a) el c_i postflop con "sigue chica/grande" según x y (b) el ancho del rango preflop (VPIP/PFR). El c preflop por umbral de fuerza no se mezcla (las estadísticas son postflop). | El .tex dice "c_i y ancho del rango preflop". |
 | 21 | interruptores | `explotacion.activa / usar_stats / filtros_tipo / contra_bots / chen_base`. | Evaluar cada pieza por separado. |
 
+## Riesgo de quiebra (§1.13) y calibración de los all-in
+
+| # | Dónde | Qué hace el código | Por qué |
+|---|---|---|---|
+| 22 | §1.13 utilidad | La utilidad esperada `u` y el equivalente cierto `ce` de cada opción se calculan SIEMPRE y quedan en el registro (`tabla_ev`: ev, u, ce, junto a `info.utilidad`); solo mandan en la elección si `riesgo.utilidad` es True. El interruptor apagado es el comportamiento del tag `v1-probabilistico` (comprobado: 250 spots, 0 diferencias en acción y EV). | Poder comparar y analizar sin cambiar nada. |
+| 23 | §1.13 apertura | La apertura preflop (§1.5: top-% de la posición a 2,5 bb, sin EV) no pasa por la utilidad; sí push/fold y todo el menú de EV. | La apertura no tiene árbol de EV en el .tex. |
+| 24 | calibración all-in | Solo rige con `calibracion_allin.activa`, en modo profundo (stack efectivo > 25 bb) y para el all-in del menú (no para x=0,5 ni x=1). Un rival cuenta como "empujó" solo si su acción es `allin` (una `raise` por todo su stack no se detecta). | Los datos son a 100 bb y de all-in; el modelo de población ya cubre el resto. |
+| 25 | calibración all-in | No hay grupo `station`: conservador queda como bot propio. Nit y maníaco no se tocan (no hay bots así). Los conteos viven en `bender/calibracion_allin.py`, que regenera `pruebas/calibrar_allin.py` (no se edita a mano). | Decisión del usuario sobre las plantillas genéricas (paso 5). |
+
 ## Solo en `params.py` (el .tex no trae los números)
 
 - `plantillas_bot` y `prob_apuesta_bot`: plantilla medida de cada bot de entrenamiento (aleatorio, conservador, base, estadistico, bandido, espia), con shrinkage s = 20 hacia la de su grupo. Las plantillas genéricas (station, nit, maníaco, aleatorio) son las del .tex y no se tocan.

@@ -293,6 +293,8 @@ e'(x)=e_R\big(R_{\text{paga}}(x)\big)
 \par\noindent{\small Ante una apuesta chica paga casi todo el rango; ante un all-in, solo su parte fuerte. Ejemplo: si ante un all-in $c=0{,}24$, $e'$ se calcula contra el 24\,\% más fuerte del rango, ordenado por la fuerza de cada combo en ese board (su equity contra una mano al azar, no contra la de Bender: el rival no conoce las cartas de Bender).}
 \uso{Se calcula para cada tamaño del menú y se compara con $EV(\text{call})$, $EV(\text{check})=e\,P$ y $EV(\text{fold})=0$. Supone una sola respuesta y sin calles extra; no modela botes laterales.}
 \ej{$P=600$, $B=300$, un rival con $c(0{,}5)=0{,}51\Rightarrow f=0{,}49$, $e'=0{,}35$: $EV=0{,}49\cdot600+0{,}51\,(0{,}35\cdot1200-300)\approx+355$.}
+\par\noindent{\small\textbf{Calibración de los all-in} (opcional, interruptor \code{calibracion\_allin.activa}, \emph{apagada} por defecto). Medida con 40\,800 manos del historial local con las cartas de todos (6 bots de entrenamiento a 100\,bb; \code{pruebas/calibrar\_allin.py}): quien paga un all-in lo hace con sus manos \emph{más fuertes} (AUC $0{,}97$ en base y estadistico: el supuesto de $R_{\text{paga}}$ se cumple), pero con frecuencias muy distintas por bot: preflop pagan el $10{,}6\,\%$ (base), $44{,}2\,\%$ (estadistico) y $0\,\%$ (bandido, espia y conservador: 0 de 8\,855, 5\,033 y 10\,817 casos); postflop $22\,\%$ (base), $57\,\%$ (estadistico), $18\,\%$ (bandido), $63\,\%$ (espia) y $0\,\%$ (conservador). Solo en modo profundo, para un all-in, $c_i$ pasa a
+$c_i^{\text{cal}}=\sum_j \pi_j\,\dfrac{k_j+s\,c_i}{n_j+s}$ ($n_j$ y $k_j$: casos medidos y pagos del tipo $j$; con un bot del kit reconocido, el suyo; $s=20$; lo que $\pi$ reparte entre tipos sin datos, nit y maníaco, se queda en $c_i$; no hay grupo \emph{station}: conservador no calibra a la station genérica). $R_{\text{paga}}$ sigue siendo la fracción $c_i^{\text{cal}}$ más fuerte.}
 \end{formbox}
 
 \subsection{Push/fold}
@@ -533,6 +535,7 @@ $\hat p_{\text{VPIP}}$ & Estimado de qué \% de manos juega (§2.5). \\
 $\hat p_{\text{PFR}}$ & Estimado de qué \% de manos sube preflop. \\
 \end{params}
 \uso{Quien solo paga suele no tener sus mejores manos (con esas habría subido), así que el top del PFR entra con peso 0{,}3 (\emph{provisional}: a veces paga con una mano fuerte para tender una trampa). Es el punto de partida del rango antes del flop. Quien sube preflop parte del top \% de su posición (§1.5), y cada re-subida multiplica el ancho por $0{,}45$ (\emph{provisional}). Mientras $\rho$ sea bajo (§3.2), se mezcla con el top \% de población de esa posición.}
+\par\noindent{\small\textbf{Rango de quien empuja all-in} (misma calibración opcional, apagada por defecto). Medido en las mismas 40\,800 manos, preflop, el 90\,\% de los all-in de cada bot sale del top: base $9{,}8\,\%$, espia $3{,}2\,\%$, estadistico $2{,}7\,\%$, bandido $1{,}8\,\%$ (aleatorio, $90\,\%$: empuja con cualquier cosa). Con la calibración activa y en modo profundo, el rango de un rival que hizo all-in preflop se recorta al top $T\,\%$ con $T=\sum_j\pi_j\,\dfrac{n_j\,q^{90}_j+s\cdot100}{n_j+s}$ (shrinkage hacia $100$, o sea sin recorte). Postflop, la probabilidad de \emph{empujar} dada la categoría de la mano (§2.2) también se mide: con mano fuerte y apuesta enfrentada empujan el $8{,}7\,\%$ (base), $34{,}8\,\%$ (estadistico), $21{,}9\,\%$ (espia) y $6{,}8\,\%$ (bandido); con mano media o menos, casi nunca. Cada celda se encoge hacia la plantilla actual con $s=20$ y entra en el reajuste de §2.1 como $P(\text{all-in}\mid\text{categoría})$.}
 \end{formbox}
 
 % =====================================================================
@@ -605,6 +608,7 @@ Reglas de solo valor & ambas activas & All-in profundo y subir sobre apuesta (§
 Estrechar por re-subida & $\times0{,}45$ & Rango preflop (§2.8) \\
 $\delta_{\max}$ & 0{,}08 & Perilla de riesgo (§1.12) \\
 $K$ (colchón) & 10\,000 (utilidad apagada por defecto) & Utilidad $\ln(S+K)$ (§1.13) \\
+Calibración de all-in & $s=20$ (apagada por defecto) & $R_{\text{paga}}$ y rango de quien empuja (§1.9, §2.8) \\
 Piso de rango & 0{,}02 & Reajuste del rango (§2.1) \\
 Plantillas & tabla §2.2 & Rango y $c$ (§2.1) \\
 Prior de tipos & .06/.53/.18/.06/.17 & Bayes (§2.3) \\
