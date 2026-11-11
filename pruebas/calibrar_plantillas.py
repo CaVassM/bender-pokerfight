@@ -66,7 +66,10 @@ def generar(semilla, manos):
 
 def contar():
     """{grupo: {"faced": {cat: [ret, paga, sube]}, "libre": {cat: [pasa, apuesta]}}} y el nº de manos."""
-    cuentas = {g: {"faced": {c: [0, 0, 0] for c in CATS}, "libre": {c: [0, 0] for c in CATS}} for g in GRUPOS}
+    def vacio():
+        return {"faced": {c: [0, 0, 0] for c in CATS}, "libre": {c: [0, 0] for c in CATS}}
+    cuentas = {g: vacio() for g in GRUPOS}
+    cuentas_bot = {b: vacio() for b in ENTRENAMIENTO}
     bot_a_grupo = {b: g for g, bs in GRUPOS.items() for b in bs}
     cache = POB.CacheCategorias()
     manos = 0
@@ -83,28 +86,29 @@ def contar():
                     if i in fuera:
                         continue
                     n = CARTAS_DE_CALLE.get(et)
-                    if et != "preflop" and n and len(tab) >= n and i in priv and bot_a_grupo.get(i):
+                    if et != "preflop" and n and len(tab) >= n and i in priv and i in cuentas_bot:
                         board = tuple(sorted(tab[:n]))
                         if not (set(priv[i]) & set(board)):
                             cat = cache.de(priv[i], board)
-                            g = cuentas[bot_a_grupo[i]]
-                            if hubo.get(et):
-                                if t == "fold":
-                                    g["faced"][cat][0] += 1
-                                elif t == "call":
-                                    g["faced"][cat][1] += 1
-                                elif t in APUESTAS:
-                                    g["faced"][cat][2] += 1
-                            else:
-                                if t == "check":
-                                    g["libre"][cat][0] += 1
-                                elif t in APUESTAS:
-                                    g["libre"][cat][1] += 1
+                            destinos = [cuentas_bot[i]] + ([cuentas[bot_a_grupo[i]]] if i in bot_a_grupo else [])
+                            for g in destinos:
+                                if hubo.get(et):
+                                    if t == "fold":
+                                        g["faced"][cat][0] += 1
+                                    elif t == "call":
+                                        g["faced"][cat][1] += 1
+                                    elif t in APUESTAS:
+                                        g["faced"][cat][2] += 1
+                                else:
+                                    if t == "check":
+                                        g["libre"][cat][0] += 1
+                                    elif t in APUESTAS:
+                                        g["libre"][cat][1] += 1
                     if t in APUESTAS:
                         hubo[et] = True
                     if t == "fold":
                         fuera.add(i)
-    return cuentas, manos
+    return cuentas, manos, cuentas_bot
 
 
 def actuales(grupo):
@@ -127,7 +131,7 @@ def main():
         with ThreadPoolExecutor(4) as pool:
             rc = list(pool.map(lambda s: generar(20270000 + s, args.manos), range(args.semillas)))
         print("códigos de salida de la arena:", rc, flush=True)
-    cuentas, manos = contar()
+    cuentas, manos, cuentas_bot = contar()
     print(f"\n{manos} manos leídas del historial.\n")
     resultado = {"manos": manos, "s": S_SHRINK, "grupos": {}}
     for g in GRUPOS:
@@ -149,6 +153,25 @@ def main():
         resultado["grupos"][g] = {"cuentas": cuentas[g], "plantilla": nueva_pl, "prob_apuesta": nueva_libre,
                                   "plantilla_anterior": pl, "prob_apuesta_anterior": libre}
         print()
+    # --- Por bot (contraestrategia §3.4): shrinkage s=20 hacia la plantilla CALIBRADA de su grupo ---
+    print("### POR BOT (shrinkage s=20 hacia la plantilla calibrada de su grupo; aleatorio, hacia 1/3 y 0,5)")
+    print("| bot | categoría | n enfrentando | retira / paga / sube | n libre | apuesta |")
+    print("|---|---|---|---|---|---|")
+    resultado["bots"] = {}
+    for b in ENTRENAMIENTO:
+        g = next((g for g, bs in GRUPOS.items() if b in bs), None)
+        if g:
+            pl0, lib0 = resultado["grupos"][g]["plantilla"], resultado["grupos"][g]["prob_apuesta"]
+        else:
+            pl0, lib0 = {c: [1 / 3] * 3 for c in CATS}, {c: 0.5 for c in CATS}
+        pl_b, lib_b = {}, {}
+        for c in CATS:
+            cf, cl = cuentas_bot[b]["faced"][c], cuentas_bot[b]["libre"][c]
+            nf, nl = sum(cf), sum(cl)
+            pl_b[c] = [round((cf[k] + S_SHRINK * pl0[c][k]) / (nf + S_SHRINK), 3) for k in range(3)]
+            lib_b[c] = round((cl[1] + S_SHRINK * lib0[c]) / (nl + S_SHRINK), 3)
+            print(f"| {b} | {c} | {nf} | " + " / ".join(f"{x:.2f}" for x in pl_b[c]) + f" | {nl} | {lib_b[c]:.2f} |")
+        resultado["bots"][b] = {"plantilla": pl_b, "prob_apuesta": lib_b, "cuentas": cuentas_bot[b]}
     ruta = os.path.join(RAIZ, "bender", "datos", "calibracion_plantillas.json")
     with open(ruta, "w", encoding="utf-8") as f:
         json.dump(resultado, f, indent=1)
