@@ -1,0 +1,5 @@
+# Dependencias de Bender (Python 3.11+; desarrollado con 3.14).
+# Entorno:  python -m venv bender/.venv  &&  bender/.venv/Scripts/python -m pip install -r bender/requirements.txt
+phevaluator==0.6.0   # evaluador de manos en C (eval7 no tiene paquete precompilado para 3.14)
+numpy==2.5.4
+pytest==9.2.0

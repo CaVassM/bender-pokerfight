@@ -1,0 +1,17 @@
+# Entorno y cachés
+.venv/
+__pycache__/
+.pytest_cache/
+
+# Logs de sesión, salidas de pruebas y evaluación
+logs/
+pruebas/salidas/
+
+# Datos de rivales (memoria por ID persistida en disco, Capa 2)
+datos/rivales/
+
+# Secretos: el token nunca se sube
+.env
+*.env
+token*
+*.token

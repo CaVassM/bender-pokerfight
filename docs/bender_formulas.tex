@@ -1,0 +1,574 @@
+\documentclass[10.5pt,a4paper]{article}
+\usepackage[margin=2.1cm,top=2.2cm,bottom=2.2cm]{geometry}
+\usepackage{fontspec}
+\usepackage{amsmath,amssymb,mathtools}
+\setmainfont{Latin Modern Roman}
+\newfontfamily\headfont{Inter}[UprightFont=* SemiBold,BoldFont=* Bold]
+\newfontfamily\labelfont{Inter}[UprightFont=* Medium]
+\usepackage{xcolor}
+\usepackage{booktabs,tabularx,array,colortbl}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{ragged2e}
+\usepackage{needspace}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{ink}{HTML}{1F2328}
+\definecolor{muted}{HTML}{5C6470}
+\definecolor{felt}{HTML}{1E6B4A}
+\definecolor{feltsoft}{HTML}{EAF4EE}
+\definecolor{line}{HTML}{CBD5CF}
+\definecolor{warnsoft}{HTML}{FBF3E4}
+\definecolor{warn}{HTML}{9A6A12}
+\color{ink}
+
+\raggedbottom
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+\RaggedRight
+\hyphenpenalty=10000
+\sloppy
+
+\titleformat{\section}{\headfont\Large\color{felt}}{\thesection}{0.6em}{}[\vspace{-2pt}{\color{line}\rule{\linewidth}{0.6pt}}]
+\titleformat{\subsection}{\headfont\normalsize}{\thesubsection}{0.5em}{}
+\titlespacing*{\section}{0pt}{14pt}{6pt}
+\titlespacing*{\subsection}{0pt}{10pt}{3pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyfoot[L]{\labelfont\footnotesize\color{muted} Bender · Hoja de fórmulas · Parte 1: modelo probabilístico}
+\fancyfoot[R]{\labelfont\footnotesize\color{muted}\thepage}
+
+% Caja de fórmula
+\newtcolorbox{formbox}[2][]{enhanced,before upper={\RaggedRight},colback=white,colframe=line,boxrule=0.6pt,arc=3pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt,
+  title={\headfont\small #2},coltitle=felt,colbacktitle=feltsoft,
+  attach boxed title to top left={yshift=-2.2mm,xshift=6pt},
+  boxed title style={boxrule=0pt,arc=2pt,colback=feltsoft},#1}
+\newtcolorbox{notebox}{enhanced,breakable,before upper={\RaggedRight},colback=warnsoft,colframe=warnsoft,boxrule=0pt,arc=3pt,left=8pt,right=8pt,top=5pt,bottom=5pt}
+
+% Tabla de parámetros
+\newenvironment{params}{\par\smallskip\renewcommand{\arraystretch}{1.25}\small
+  \tabularx{\linewidth}{@{}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}X@{}}
+  \toprule {\labelfont Parámetro} & {\labelfont Qué es y de dónde sale}\\ \midrule}
+  {\bottomrule\endtabularx\par}
+\newcommand{\uso}[1]{\par\smallskip{\labelfont\small\color{felt} Cómo usarla.}\ {\small #1}}
+\newcommand{\ej}[1]{\par\smallskip{\labelfont\small\color{muted} Ejemplo.}\ {\small #1}}
+\newcommand{\code}[1]{{\ttfamily\small #1}}
+
+\let\oldsection\section
+\renewcommand{\section}{\needspace{16\baselineskip}\oldsection}
+\begin{document}
+
+{\headfont\color{felt}\Huge Bender\par}
+\vspace{2pt}
+{\headfont\Large Hoja de fórmulas · Parte 1: modelo probabilístico\par}
+\vspace{4pt}
+{\color{muted}Las fórmulas exactas con las que se implementan la Capa 1 (cerebro sólido), la Capa 2 (lectura de rivales) y la explotación. La Parte 2 (RL: bandido y ajuste de parámetros) va en una hoja aparte.\par}
+\vspace{6pt}
+
+\begin{notebox}\small
+\textbf{Cómo leer esta hoja.} Cada caja trae la fórmula, una tabla con cada parámetro y una línea de cómo usarla. Los valores marcados como \emph{provisional} son puntos de partida: se miden con los bots del kit y el servidor de pruebas, y se afinan en la Capa 3. Todas las cantidades de fichas se miden \textbf{desde la decisión actual}: lo que ya se puso en el pozo no cuenta (costo hundido), así que $EV(\text{retirarse}) = 0$ siempre.
+\end{notebox}
+
+\section*{0 · Notación común}
+
+\begin{params}
+$P$ & (Sola, sin paréntesis.) Pozo en el momento de decidir, \textbf{incluidas} todas las apuestas de esta ronda (también la del rival que hay que igualar). \\
+$C$ & Fichas que Bender tiene que agregar para igualar. \\
+$B$ & Tamaño de una apuesta cuando nadie apostó todavía en la ronda. \\
+$A,\ A'$ & En una apuesta o subida: $A$ = fichas que \textbf{agrega Bender}; $A'$ = fichas que agrega el rival que la paga. \\
+$e$ & Equity de Bender: fracción del pozo que se lleva en promedio si la mano llega al showdown. \\
+$e'$ & Equity de Bender \textbf{si le pagan} (contra el rango que sigue después de pagar). \\
+$c_i$ & Probabilidad de que el rival $i$ \textbf{pague} (o siga) ante una apuesta. \\
+$f$ & \textbf{Fold equity}: probabilidad de que \textbf{todos} se retiren. Solo se usa para esto. \\
+$x$ & Tamaño de una apuesta de Bender, en fracción del pozo (definición general en §1.8). \\
+$z$ & Tamaño de una apuesta \textbf{observada de un rival}. Se calcula igual que $x$; cambia solo quién apuesta (§2.7). \\
+$h$ & Un combo concreto de dos cartas del rival, por ejemplo Q$\spadesuit$Q$\heartsuit$. \\
+$w(h)$ & Peso del combo $h$ en el rango del rival, entre 0 y 1. \\
+$t$ & Tipo de rival: nit, TAG, station, maníaco o aleatorio. \\
+$\pi_t$ & Probabilidad (creencia actual) de que el rival sea de tipo $t$. \\
+$\mathrm{bb}$ & Ciega grande: 100 fichas (ciegas fijas 50/100 todo el torneo). \\
+$P(\cdot)$ & Con paréntesis es una \textbf{probabilidad}, por ejemplo $P(a\mid t)$. No confundir con el pozo $P$. \\
+\end{params}
+
+% =====================================================================
+\clearpage
+\section{Capa 1 · Cerebro sólido}
+
+\subsection{Combos y bloqueadores}
+\begin{formbox}{Combos de cada clase de mano}
+\[
+\#\text{pareja}=\binom{4}{2}=6 \qquad \#\text{suited}=4 \qquad \#\text{offsuit}=4\cdot 3=12 \qquad \text{total}=1326
+\]
+Con cartas muertas (las de Bender y el board), se cuentan solo los combos \textbf{vivos}:
+\[
+\#\text{pareja viva}=\binom{n_r}{2} \qquad \#\text{suited viva}=q \qquad \#\text{offsuit viva}=n_{r_1}\,n_{r_2}-q
+\]
+\begin{params}
+$n_r$ & Cuántas cartas del rango $r$ (por ejemplo, ases) siguen vivas: 4 menos las que ve Bender. \\
+$q$ & Palos en los que \textbf{las dos} cartas siguen vivas (cada uno da un combo suited). \\
+\end{params}
+\uso{Antes de cualquier cálculo de rango, se borran los combos que usan una carta muerta.}
+\ej{Bender tiene A$\spadesuit$J$\heartsuit$: AA vivos $=\binom{3}{2}=3$. Para AK: $n_A=3$, $n_K=4$, $q=3$ ($\heartsuit,\diamondsuit,\clubsuit$) $\Rightarrow$ AKs $=3$, AKo $=12-3=9$.}
+\end{formbox}
+
+\subsection{Equity por Monte Carlo}
+\begin{formbox}{Equity y su error}
+\[
+e \approx \frac{W + \sum_{j\in\text{empates}} 1/k_j}{N}
+\qquad\qquad
+\sigma_e=\sqrt{\frac{e(1-e)}{N}}
+\qquad\qquad
+N \ge \frac{e(1-e)}{\varepsilon^2}
+\]
+\begin{params}
+$N$ & Número de simulaciones (repartos al azar del resto del board y de las manos rivales). \\
+$W$ & Simulaciones en que Bender gana solo. \\
+$k_j$ & En la simulación $j$ con empate, cuántos jugadores empatan (Bender cobra $1/k_j$). Heads-up es $1/2$. \\
+$\sigma_e$ & Error típico de la estimación. \\
+$\varepsilon$ & Error máximo aceptado. \\
+\end{params}
+\uso{Para $\varepsilon = 1\,\%$ en el peor caso ($e=0{,}5$) basta $N = 2500$. Cuándo dejar de simular lo decide el reloj adaptativo de abajo.}
+\end{formbox}
+
+\begin{formbox}{Cuándo dejar de simular (reloj adaptativo)}
+\[
+\text{parar si}\quad N\ge N_{\min}\ \text{ y }\ \Big(\sigma_e\le\varepsilon_{\text{obj}}\ \ \text{o}\ \ |e-e_{\text{ref}}|\ge k\,\sigma_e\Big)
+\qquad\text{o si}\quad t\ge T_{\max}
+\]
+\[
+T_{\max}=\min\!\Big(T_{\text{tope}},\ \eta\cdot\frac{T_{\text{rest}}}{D_{\text{rest}}}\Big)
+\qquad
+D_{\text{rest}}=2{,}5\cdot(50-\text{manos jugadas en la mesa})
+\]
+\begin{params}
+$N_{\min}$ & Mínimo de simulaciones antes de poder parar: 2000. \\
+$\varepsilon_{\text{obj}}$ & Precisión suficiente: 0{,}005 (medio punto de equity). \\
+$e_{\text{ref}}$ & El umbral que importa para esta decisión, el más cercano a $e$ entre: $e_{\min}$ de §1.6 (si hay que igualar), 0{,}25 y 0{,}50 (límites de §1.11). \\
+$k$ & Cuántos $\sigma_e$ de distancia al umbral bastan para que más simulaciones no cambien la decisión: 3. \\
+$t$ & Tiempo ya usado en esta decisión, revisado cada 64 simulaciones. \\
+$T_{\text{tope}}$ & Tope absoluto por decisión: 1{,}5 s (el límite de la arena es 5 s). \\
+$T_{\text{rest}}$ & Segundos que le quedan a la mesa: $360$ menos el tiempo desde la primera mano de la mesa. \\
+$D_{\text{rest}}$ & Decisiones de Bender que faltan, estimadas con unas 2{,}5 por mano. \\
+$\eta$ & Fracción de su parte justa del reloj que Bender se permite usar: 0{,}5. \\
+\end{params}
+\uso{Cada mesa se corta a los 6 minutos aunque no lleguen a 50 manos. Con unos 7 s por mano para toda la mesa, Bender no puede gastar 2 s fijos por decisión. Medido con el evaluador en C (\code{phevaluator}): mediana de 5 ms y p95 de 17 ms por decisión; el tope casi nunca actúa.}
+\end{formbox}
+
+\subsection{Equity contra un rango}
+\begin{formbox}{Promedio ponderado por el rango}
+\[
+e_R=\frac{\sum_h w(h)\,e(h)}{\sum_h w(h)}
+\qquad\qquad
+P(\text{sortear } h)=\frac{w(h)}{\sum_{h'} w(h')}
+\]
+\begin{params}
+$e(h)$ & Equity de Bender si el rival tuviera exactamente el combo $h$. \\
+$w(h)$ & Peso del combo vivo $h$ en el rango (§2.1). \\
+\end{params}
+\uso{No se calcula combo por combo: en cada simulación de Monte Carlo se \textbf{sortea} el combo del rival con probabilidad proporcional a $w(h)$. Con varios rivales se sortea un combo de cada rango y se descarta la simulación si dos combos comparten carta.}
+\ej{A$\spadesuit$J$\heartsuit$ contra \code{QQ+, AK} (27 combos vivos): $e_R=6{,}768/27\approx 25\,\%$, contra $63{,}7\,\%$ frente a una mano al azar.}
+\end{formbox}
+
+\subsection{Stack efectivo y modo de juego}
+\begin{formbox}{Stack efectivo en ciegas grandes}
+\[
+S_{\text{ef}}=\frac{\min\!\big(S_{\text{Bender}},\ \max_i S_i\big)}{\mathrm{bb}}
+\qquad
+\text{modo}=\begin{cases}
+\text{push/fold} & S_{\text{ef}}\le 15\\
+\text{intermedio} & 15< S_{\text{ef}}\le 25\\
+\text{profundo} & S_{\text{ef}}>25
+\end{cases}
+\]
+\begin{params}
+$S_{\text{Bender}}$ & Fichas de Bender detrás (\code{saldo}). \\
+$S_i$ & Fichas del rival $i$ que sigue en la mano. \\
+\end{params}
+\uso{Se recalcula en cada decisión. Con ciegas fijas y 10\,000 fichas iniciales (100 bb), lo normal es el modo profundo; push/fold queda de respaldo.}
+\end{formbox}
+
+\subsection{Apertura preflop (nadie subió)}
+\begin{formbox}{Rangos de apertura por posición}
+\[
+\text{abrir con } h \iff \text{rank}(h)\le \text{top}_{\text{pos}}\ \%
+\qquad\qquad \text{tamaño de apertura}=2{,}5\ \mathrm{bb}
+\]
+\begin{center}\small\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}lcccccc@{}}\toprule
+Posición & UTG & HJ & CO & BTN & SB & BTN/SB heads-up\\ \midrule
+top \% & 14{,}3 & 18{,}9 & 25{,}5 & 43{,}3 & 33{,}0 & 70\\ \bottomrule
+\end{tabular}\end{center}
+\begin{params}
+rank$(h)$ & Posición de la clase de $h$ en el ranking de 169 clases (por equity contra una mano al azar), medida en \% acumulado de combos. \\
+top$_{\text{pos}}$ & Porcentaje de manos que abre desde esa posición. Con 5 jugadores no hay UTG. \\
+\end{params}
+\uso{Bender nunca entra pagando la ciega (sin limp): abre subiendo o se retira. Si ya hubo una subida, decide con el EV (§1.6–§1.9) usando el rango estimado del que subió.}
+\end{formbox}
+
+\subsection{Pot odds y EV de igualar}
+\begin{formbox}{Igualar (call)}
+\[
+e_{\min}=\frac{C}{P+C}
+\qquad\qquad
+EV(\text{call})=e\,(P+C)-C
+\]
+\begin{params}
+$P$ & Pozo \textbf{antes} de igualar, incluida la apuesta del rival. \\
+$C$ & Lo que cuesta igualar. \\
+$e$ & Equity contra el rango del rival (§1.3). \\
+\end{params}
+\uso{Igualar conviene si $e>e_{\min}$, lo mismo que $EV(\text{call})>0$. Supone que no hay más apuestas después; si quedan calles, es una aproximación.}
+\ej{$P=1300$, $C=900$: $e_{\min}=40{,}9\,\%$. Con $e=25{,}1\,\%$: $EV=0{,}251\cdot2200-900\approx-348$ $\Rightarrow$ retirarse.}
+\end{formbox}
+
+\subsection{Fold equity}
+\begin{formbox}{Probabilidad de que todos se retiren}
+\[
+f=\prod_{i=1}^{n}(1-c_i)
+\qquad\qquad
+c(x)=\frac{0{,}65}{1+0{,}55\,x}\ \ \big(+0{,}12\ \text{si el rival ya puso fichas en esta ronda; tope } 0{,}9\big)
+\]
+\begin{params}
+$n$ & Rivales que todavía pueden responder a la apuesta. \\
+$c_i$ & Probabilidad de que el rival $i$ pague. Sin datos del rival se usa el modelo de población $c(x)$; con datos, el $c_i$ de la Capa 2 (§2.1 y §3.3). \\
+$x$ & Tamaño de la apuesta en fracción del pozo (§1.8). \\
+$0{,}65;\ 0{,}55;\ 0{,}12$ & Constantes del modelo de población. \emph{Provisional}. \\
+\end{params}
+\uso{En modo push/fold preflop se usa $c=0{,}385$ (rango de pago Nash a 10 bb, §1.10).}
+\ej{$c(0{,}5)=0{,}51$, $c(1)=0{,}42$, $c(2)=0{,}31$. Dos rivales con $c=0{,}45$ y $0{,}60$: $f=0{,}55\cdot0{,}40=0{,}22$.}
+\end{formbox}
+
+\subsection{Tamaño de apuesta}
+\begin{formbox}{Tamaño relativo al pozo (definición general)}
+\[
+x=\frac{\text{monto}-\text{apuesta actual}}{\text{pozo si pagas}}
+\qquad
+\text{y si nadie apostó en la ronda:}\quad x=\frac{B}{P}
+\]
+\begin{params}
+monto & Total al que Bender lleva su apuesta en la ronda (lo que se envía en \code{monto}). \\
+apuesta actual & La apuesta más alta de la ronda antes de actuar. \\
+pozo si pagas & $P+C$: el pozo después de que Bender igualara. \\
+\end{params}
+\uso{Menú de 5 acciones: retirarse, pasar o igualar, $x\approx\tfrac12$, $x\approx1$ y all-in. Coincide con la cuenta de \code{ApostarPozo} del SDK del kit.}
+\end{formbox}
+
+\subsection{Faroles y apuestas}
+\begin{formbox}{Farol puro (sin equity si le pagan)}
+\[
+EV(\text{farol})=f\,P-(1-f)\,B
+\qquad\qquad
+f^{*}=\frac{B}{P+B}
+\]
+\begin{params}
+$f$ & Fold equity de esa apuesta (§1.7). \\
+$f^{*}$ & Fold equity mínima para que un farol puro no pierda fichas. \\
+\end{params}
+\uso{Si $f<f^{*}$, un farol sin equity pierde. Apostar más grande baja $c$ pero sube $f^{*}$: con $B=P/2$, $f^*=33\,\%$; con $B=P$, $f^*=50\,\%$. Si el farol es una \textbf{subida} sobre otra apuesta, se cambia $B$ por $A$ (lo que agrega Bender): $f^*=A/(P+A)$.}
+\end{formbox}
+
+\begin{formbox}{EV de apostar o subir (forma general que usa el código)}
+\[
+EV(\text{apuesta})=f\,P+(1-f)\big[e'\,(P+A+A')-A\big]
+\]
+\[
+\text{Caso simple (un rival, apuesta $B$ que paga completa): } A=A'=B\]
+\[EV=f\,P+(1-f)\big[e'(P+2B)-B\big]
+\]
+\begin{params}
+$A$ & Fichas que agrega Bender con esa acción. \\
+$A'$ & Fichas que agrega el rival que paga: lo que le falta para igualar, con tope en su stack (si no alcanza, solo pone su all-in). Se toma el rival con más fichas en juego. \\
+$e'$ & Equity de Bender si le pagan. \\
+\end{params}
+\uso{Se calcula para cada tamaño del menú y se compara con $EV(\text{call})$, $EV(\text{check})=e\,P$ y $EV(\text{fold})=0$. Supone una sola respuesta y sin calles extra; no modela botes laterales.}
+\ej{$P=600$, $B=300$, un rival con $c(0{,}5)=0{,}51\Rightarrow f=0{,}49$, $e'=0{,}35$: $EV=0{,}49\cdot600+0{,}51\,(0{,}35\cdot1200-300)\approx+355$.}
+\end{formbox}
+
+\subsection{Push/fold}
+\begin{formbox}{All-in preflop con stack corto}
+\[
+EV(\text{push})=f\,P+(1-f)\big[e'\,(P+A+A')-A\big]\qquad\text{(la misma fórmula, con $A$ = todo el stack)}
+\]
+\begin{center}\small\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}lcc@{}}\toprule
+Nash a 10 bb, heads-up & SB empuja con & BB paga con\\ \midrule
+Rango & top 56{,}6\,\% & top 38{,}5\,\%\\ \bottomrule
+\end{tabular}\end{center}
+\begin{params}
+$f$ & $(1-0{,}385)^{n}$ con $n$ rivales por detrás (aproximación: con varios rivales, cada uno paga algo menos). \\
+$e'$ & Equity si le pagan: contra el rango de pago, top 38{,}5\,\%. \\
+\end{params}
+\uso{Solo en modo push/fold ($S_{\text{ef}}\le15$). Las únicas opciones son all-in o retirarse. Los valores Nash se usan si nadie subió antes; si alguien ya subió, $e'$ es contra el rango estimado de ese rival.}
+\ej{SB con 10 bb: $P=150$, $A=950$, $A'=900$, $f=0{,}615$, $e'=0{,}40$: $EV=92{,}3+0{,}385\,(800-950)\approx+35 \Rightarrow$ empuja.}
+\end{formbox}
+
+\subsection{Reglas de decisión}
+\begin{formbox}{Cómo se elige la acción}
+\[
+a^{*}=\arg\max_{a\ \text{no descartada}} EV(a)
+\qquad
+\text{tipo de apuesta}=\begin{cases}\text{valor} & e'\ge 0{,}50\\ \text{semi-farol} & 0{,}25\le e'<0{,}50\\ \text{farol} & e'<0{,}25\end{cases}
+\]
+\begin{params}
+Multiway & Con 3 o más rivales en la mano y $e'<0{,}50$, se descartan las apuestas (sin valor no se farolea contra varios). \\
+Compromiso & En modo intermedio, si igualar o subir cuesta más de $\tfrac13$ del stack total, se descarta: queda all-in o retirarse. \\
+Mezcla & Si la segunda mejor acción cumple $EV_1-EV_2<0{,}02\cdot\max(P,\mathrm{bb})$, $EV_2\ge0$ y ninguna de las dos es retirarse, se elige la segunda con probabilidad $0{,}35$. Así Bender no es predecible. \\
+\end{params}
+\end{formbox}
+
+\subsection{Perilla de riesgo del torneo}
+\begin{formbox}{Margen de equity en calls grandes}
+\[
+e_{\min}^{\text{torneo}}=\frac{C}{P+C}+\delta
+\qquad
+\delta=\delta_{\max}\cdot g \qquad (\text{solo si } C>\tfrac13\,S_{\text{Bender}})
+\]
+\begin{params}
+$\delta_{\max}$ & Margen máximo: 0{,}08. \emph{Provisional}. \\
+$g$ & Entre $-0{,}5$ y $1$. Positivo si Bender va cómodo en el top 6 y quedan pocas rondas (pedir más equity, no arriesgar); 0 en las primeras rondas; negativo si va por debajo del corte al final (aceptar más varianza: quedar 7.º es igual que quedar último). Se define con datos en la Capa 3. \\
+\end{params}
+\uso{Solo afecta los calls que ponen en riesgo gran parte del stack: quedar en 0 elimina, y clasifican los 6 con más fichas.}
+\end{formbox}
+
+% =====================================================================
+\clearpage
+\section{Capa 2 · Lectura de rivales}
+
+\subsection{Rango actualizado por cada acción}
+\begin{formbox}{Reajuste del rango (Bayes con pesos)}
+\[
+w'(h)=\max\!\big(w(h)\,P(a\mid h),\ 0{,}02\,w(h)\big)
+\qquad
+\tilde w(h)=\frac{w'(h)}{\sum_{h'}w'(h')}
+\qquad
+c=\frac{\sum_h w(h)\,P(\text{sigue}\mid h)}{\sum_h w(h)}
+\]
+\begin{params}
+$a$ & Acción observada del rival (sacada de \code{historial\_acciones}). \\
+$P(a\mid h)$ & Verosimilitud: qué tan seguido hace $a$ quien tiene $h$. Sale de la plantilla (§2.2) de su tipo. \\
+$0{,}02$ & Piso: ningún combo baja de 2\,\% de su peso, para que un showdown “imposible” no rompa el modelo. \\
+$\tilde w$ & Rango normalizado (suma 1). \\
+$c$ & Probabilidad de que el rival \textbf{siga} (pague o suba): sale de la misma plantilla, \textbf{antes} de que Bender apueste. La plantilla está calibrada para $x\approx\tfrac12$; para otro tamaño se escala con el modelo de población: $c(x)=c_{1/2}\cdot c_{\text{pob}}(x)/c_{\text{pob}}(\tfrac12)$. \\
+\end{params}
+\uso{Para $c$ se usa $P(\text{sigue}\mid h)$; para reajustar el rango después de que el rival actúa, se usa la acción exacta: $P(\text{paga}\mid h)$ si pagó, $P(\text{sube}\mid h)$ si subió. Preflop el rango arranca en §2.8. En cada calle, primero se quitan los combos bloqueados por el board.}
+\ej{J$\diamondsuit$7$\clubsuit$2$\spadesuit$, 259 combos (43 fuertes, 45 medios, 171 aire), rival promedio. Antes de apostar: $c=(43\cdot.95+45\cdot.65+171\cdot.15)/259=95{,}75/259=0{,}37$. Si paga: pesos $43\cdot.55,\ 45\cdot.60,\ 171\cdot.07$ y el aire baja de 66\,\% a 19\,\% del rango.}
+\end{formbox}
+
+\subsection{Plantillas por categoría de mano}
+\begin{formbox}{Verosimilitudes postflop frente a una apuesta: $P(a\mid \text{categoría},t)$ \ (\emph{provisional})}
+\begin{center}\small\renewcommand{\arraystretch}{1.18}
+\begin{tabular}{@{}l|ccc|ccc|ccc|ccc@{}}\toprule
+& \multicolumn{3}{c|}{Fuerte} & \multicolumn{3}{c|}{Media} & \multicolumn{3}{c|}{Proyecto} & \multicolumn{3}{c}{Aire}\\
+Tipo & ret & paga & sube & ret & paga & sube & ret & paga & sube & ret & paga & sube\\ \midrule
+Promedio / TAG & .05 & .55 & .40 & .35 & .60 & .05 & .25 & .60 & .15 & .85 & .07 & .08\\
+Nit & .05 & .65 & .30 & .50 & .48 & .02 & .55 & .42 & .03 & .93 & .05 & .02\\
+Station & .02 & .88 & .10 & .10 & .88 & .02 & .10 & .85 & .05 & .30 & .68 & .02\\
+Maníaco & .02 & .38 & .60 & .15 & .55 & .30 & .10 & .45 & .45 & .40 & .25 & .35\\
+Aleatorio & $\tfrac13$ & $\tfrac13$ & $\tfrac13$ & $\tfrac13$ & $\tfrac13$ & $\tfrac13$ & $\tfrac13$ & $\tfrac13$ & $\tfrac13$ & $\tfrac13$ & $\tfrac13$ & $\tfrac13$\\ \bottomrule
+\end{tabular}\end{center}
+\begin{params}
+Fuerte & Top pair o mejor: overpair, dos pares, trío, escalera, color… \\
+Media & Pareja menor: pareja de bolsillo bajo la carta alta del board, segunda o tercera pareja. \\
+Proyecto & Sin pareja pero con 8 o más outs (proyecto de color o de escalera abierta). \\
+Aire & Todo lo demás (un gutshot cuenta como aire). \\
+ret / paga / sube & Se retira / iguala / sube. Cada trío suma 1. “Sigue” = paga + sube. \\
+\end{params}
+\uso{Cuando nadie apostó, se usa $P(\text{apuesta}\mid\text{cat})$ del rival promedio: fuerte .65, media .35, proyecto .45, aire .25 (pasar = 1 menos eso). Por tipo se multiplica: nit $\times0{,}7$, station $\times0{,}6$, maníaco $\times1{,}5$ (tope .95); aleatorio .50 en todo. La fila promedio da los números de S1 para “sigue” (.95, .65, .15).}
+\end{formbox}
+
+\subsection{Bayes sobre el tipo de rival}
+\begin{formbox}{Posterior del tipo}
+\[
+P(t\mid a)=\frac{P(a\mid t)\,P(t)}{\sum_{t'}P(a\mid t')\,P(t')}
+\qquad\qquad
+\log\pi_t \leftarrow \lambda\log\pi_t+\log P(a\mid t)
+\]
+\begin{params}
+$P(t)$ & Prior de población: nit .25, TAG .25, station .20, maníaco .15, aleatorio .15. \emph{Provisional}. \\
+$P(a\mid t)$ & Verosimilitud de la acción para el tipo (tabla de abajo preflop; postflop, la plantilla de §2.2). \\
+$\pi_t$ & Posterior guardado por ID del rival, en disco. \\
+$\lambda$ & Olvido (§2.6). Con $\lambda=1$ es Bayes puro. \\
+\end{params}
+\begin{center}\small\renewcommand{\arraystretch}{1.18}
+\begin{tabular}{@{}lccccc@{}}\toprule
+Preflop, por mano & Nit & TAG & Station & Maníaco & Aleatorio\\ \midrule
+Se retira (F) & .88 & .78 & .45 & .35 & .33\\
+Entra pagando (C) & .04 & .06 & .50 & .15 & .33\\
+Entra subiendo (R) & .08 & .16 & .05 & .50 & .33\\ \bottomrule
+\end{tabular}\end{center}
+\uso{Se trabaja en logaritmos (evita \emph{underflow}). Para normalizar: restar el máximo, exponenciar y dividir por la suma. Piso: ningún $\pi_t$ baja de 0{,}01.}
+\ej{Prior + “entra pagando”: station pasa de 20\,\% a 50{,}6\,\% en una mano.}
+\end{formbox}
+
+\subsection{Mezcla de plantillas}
+\begin{formbox}{Verosimilitud que usa Bender para el rango}
+\[
+P(a\mid h)=\sum_{t}\pi_t\;P(a\mid h,t)
+\]
+\begin{params}
+$\pi_t$ & Creencia actual sobre el tipo del rival (§2.3). \\
+$P(a\mid h,t)$ & Plantilla del tipo $t$ para la categoría de $h$ (§2.2). \\
+\end{params}
+\uso{No se apuesta por un solo tipo: el rango y el $c$ salen de la mezcla. Si el rival es un bot del kit reconocido (§2.7), se usa su lógica en lugar de la mezcla.}
+\end{formbox}
+
+\subsection{Estadísticas con prior Beta (shrinkage)}
+\begin{formbox}{Estimar una frecuencia con pocas manos}
+\[
+\alpha_0=s\,m,\quad \beta_0=s\,(1-m)
+\qquad
+\text{tras $k$ síes en $n$:}\quad \alpha=\alpha_0+k,\ \ \beta=\beta_0+n-k
+\]
+\[
+\hat p=\frac{\alpha}{\alpha+\beta}=\frac{k+s\,m}{n+s}
+\qquad\qquad
+\sigma=\sqrt{\frac{\hat p\,(1-\hat p)}{\alpha+\beta+1}}
+\]
+\begin{params}
+$k,\ n$ & Veces que pasó lo que se mide / oportunidades observadas. \\
+$m$ & Promedio de la población (se mide en el servidor de pruebas). VPIP: 0{,}30 \emph{provisional}. \\
+$s$ & Fuerza del prior, en manos imaginarias: 20 para VPIP y PFR. \emph{Provisional}. \\
+$\hat p$ & Estimado de la frecuencia. \\
+$\sigma$ & Incertidumbre del estimado: decide cuánto explotar (§3.2). \\
+\end{params}
+\uso{Estadísticas por ID: VPIP, PFR, “sigue (paga o sube) ante una apuesta chica” ($x\le0{,}6$) y “sigue ante una apuesta grande” ($x>0{,}6$). Cada una es un par $(\alpha,\beta)$.}
+\ej{$k=7$, $n=10$, $m=0{,}3$, $s=20$: $\hat p=13/30=43{,}3\,\%$ (crudo: 70\,\%), $\sigma=8{,}9\,\%$.}
+\end{formbox}
+
+\subsection{Olvido}
+\begin{formbox}{Adaptarse a rivales que cambian}
+\[
+\alpha\leftarrow\lambda\,\alpha,\quad \beta\leftarrow\lambda\,\beta \ \ \text{(primero)} \qquad\text{luego se suma la observación nueva}
+\qquad
+\text{memoria}=\frac{1}{1-\lambda}
+\]
+\begin{params}
+$\lambda$ & Factor de olvido: 0{,}98 (memoria de unas 50 manos). \emph{Provisional}, rango razonable 0{,}97–0{,}99. \\
+\end{params}
+\uso{Se aplica igual a $\log\pi_t$ (§2.3). Es la misma idea que el horizonte $1/(1-\gamma)$ de los MDP. Con olvido, $\sigma$ nunca llega a 0, lo que frena la explotación.}
+\end{formbox}
+
+\subsection{Huella de los montos (bots del kit)}
+\begin{formbox}{Reconocer un bot copiado del kit}
+\[
+z=\frac{\text{monto}-\text{apuesta actual}}{\text{pozo si pagas}}
+\qquad\qquad
+P(\text{bot}\mid z_1,\dots,z_n)\propto P(\text{bot})\prod_{i}P(z_i\mid \text{bot})
+\]
+\begin{params}
+$z$ & Tamaño de cada apuesta postflop de un rival (misma cuenta que $x$). Cae en una caja si está a $\pm0{,}03$ de .33, .4, .5, .6, .66, .75, .9 o 1.0; si no, en “otro”. No se cuentan los all-in ni las apuestas recortadas por el stack. \\
+$P(\text{bot})$ & 0{,}5 para “propio” (bot escrito desde cero) y 0{,}1 para cada bot del kit. \\
+$P(z\mid\text{bot})$ & Tabla de abajo, estimada leyendo el código del kit. \emph{Provisional}: se mide corriendo los bots. “Propio” reparte $1/9$ en cada caja. \\
+\end{params}
+\begin{center}\small\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}lccccccccc@{}}\toprule
+Bot & .33 & .4 & .5 & .6 & .66 & .75 & .9 & 1.0 & otro\\ \midrule
+base & .01 & .40 & .01 & .01 & .01 & .52 & .01 & .01 & .02\\
+novato & .20 & .01 & .44 & .01 & .01 & .29 & .01 & .01 & .02\\
+espia & .01 & .01 & .44 & .24 & .01 & .01 & .14 & .12 & .02\\
+bandido & .01 & .01 & .44 & .01 & .29 & .01 & .01 & .20 & .02\\
+estadistico & .01 & .01 & .30 & .08 & .08 & .08 & .08 & .08 & .28\\ \bottomrule
+\end{tabular}\end{center}
+\uso{Si $P(\text{bot})\ge0{,}9$, Bender usa la contraestrategia de ese bot (§3.4). Si el equipo cambió los tamaños, el posterior se va a “propio” y no se rompe nada.}
+\ej{0{,}75, 0{,}4, 0{,}75 $\Rightarrow$ base con 93\,\%.}
+\end{formbox}
+
+\subsection{Rango preflop inicial desde las estadísticas}
+\begin{formbox}{Ancho del rango cuando el rival entra}
+\[
+\text{rango si sube}=\text{top}\big(100\,\hat p_{\text{PFR}}\big)\,\%
+\qquad
+w_{\text{paga}}(h)=\begin{cases}1 & h\in\text{top}(100\,\hat p_{\text{VPIP}})\setminus\text{top}(100\,\hat p_{\text{PFR}})\\ 0{,}3 & h\in\text{top}(100\,\hat p_{\text{PFR}})\\ 0 & \text{resto}\end{cases}
+\]
+\begin{params}
+$\hat p_{\text{VPIP}}$ & Estimado de qué \% de manos juega (§2.5). \\
+$\hat p_{\text{PFR}}$ & Estimado de qué \% de manos sube preflop. \\
+\end{params}
+\uso{Quien solo paga suele no tener sus mejores manos (con esas habría subido), así que el top del PFR entra con peso 0{,}3 (\emph{provisional}: a veces paga con una mano fuerte para tender una trampa). Es el punto de partida del rango antes del flop. Si alguien sube después (re-raise), el rango se estrecha con la plantilla. Mientras $\rho$ sea bajo (§3.2), se mezcla con el top \% de población de esa posición.}
+\end{formbox}
+
+% =====================================================================
+\section{Explotación · de la lectura a la decisión}
+
+\begin{notebox}\small
+\textbf{Principio.} Explotar no es agregar reglas nuevas: es meter los números \textbf{del rival} ($c_i$ y su rango) en \textbf{las mismas fórmulas} de la Capa 1. Si el rival paga todo, su $c$ es alto: $f$ baja, los faroles pierden EV y las apuestas de valor grandes ganan EV, sin que nadie lo programe a mano. Lo único nuevo es \textbf{cuánto} confiar en esos números.
+\end{notebox}
+
+\subsection{Peso de explotación según la confianza}
+\begin{formbox}{Cuánto se desvía Bender de la población}
+\[
+\rho_i=\rho_{\max}\cdot\max\!\left(0,\ 1-\frac{\kappa\,\sigma_i}{|\hat p_i-m|}\right)
+\qquad (\rho_i=0 \text{ si } n_i<n_{\min} \text{ o } \hat p_i=m)
+\]
+\begin{params}
+$\hat p_i,\ \sigma_i$ & Estimado e incertidumbre de la estadística del rival $i$ (§2.5). \\
+$m$ & Valor de población de esa estadística. \\
+$|\hat p_i-m|$ & Cuánto se aleja el rival de lo normal. \\
+$\kappa$ & Exigencia: cuántos $\sigma$ tiene que separarse para explotar. 1{,}0 \emph{provisional}. \\
+$\rho_{\max}$ & Tope de explotación: 0{,}8 (siempre queda algo de juego sólido). \\
+$n_{\min}$ & Mínimo de observaciones: 8. \\
+\end{params}
+\uso{Si la diferencia con la población es menor que $\kappa\sigma$, no se explota ($\rho=0$). A medida que $\sigma$ se achica, $\rho$ sube hasta $\rho_{\max}$. Es conservador a propósito: $\hat p$ ya viene encogido hacia $m$ (§2.5) y $\rho$ vuelve a frenar.}
+\ej{VPIP con $m=0{,}30$. Con 10 manos ($\hat p=0{,}433$, $\sigma=0{,}089$): $\rho=0{,}8\,(1-0{,}089/0{,}133)=0{,}26$. Con 85 manos ($\hat p=0{,}552$, $\sigma=0{,}048$): $\rho=0{,}8\,(1-0{,}048/0{,}252)=0{,}65$.}
+\end{formbox}
+
+\subsection{Mezcla de parámetros}
+\begin{formbox}{Parámetro que entra a las fórmulas}
+\[
+\theta_i=(1-\rho_i)\,\theta_{\text{base}}+\rho_i\,\hat\theta_i
+\]
+\begin{params}
+$\theta_{\text{base}}$ & Valor del modelo. Para $c_i$: el $c$ que sale del rango y las plantillas (§2.1), que ya usa el tipo y el board; sin rango, $c(x)$ de §1.7. Para el rango preflop: el top \% de población de esa posición. \\
+$\hat\theta_i$ & Valor medido del rival: $\hat p$ de “sigue ante apuesta chica/grande” (§2.5), o el ancho de §2.8. \\
+$\rho_i$ & Peso de explotación de esa estadística (§3.2). \\
+\end{params}
+\uso{Se aplica a dos cosas: el $c_i$ de cada rival (según el tamaño $x$, caja chica o grande) y el ancho de su rango preflop. Lo demás sale solo de las fórmulas de la Capa 1.}
+\end{formbox}
+
+\subsection{Ajustes por tipo (solo con certeza alta)}
+\begin{formbox}{Reglas extra cuando $\pi_t\ge\tau$}
+\begin{params}
+Nit & Robarle las ciegas seguido; respetar sus subidas grandes (su rango ya es estrecho por §2.1). \\
+TAG & Juego sólido de Capa 1, sin ajustes extra. \\
+Station & No farolearle nunca; apuestas de valor con $x\approx1$ incluso con manos medias-fuertes. \\
+Maníaco & No farolearle; pagar más liviano (su rango de subida es ancho) y dejar que apueste él. \\
+Aleatorio & Apuestas de valor finas y frecuentes; no darle crédito a sus subidas. \\
+Bot del kit & Con $P(\text{bot})\ge0{,}9$: contraestrategia desde su código (por ejemplo, \code{base} con $z=0{,}75$ tiene mano fuerte y nunca farolea). \\
+$\tau$ & Umbral de certeza: 0{,}7. \emph{Provisional}. \\
+\end{params}
+\uso{Estas reglas solo filtran el menú (por ejemplo, descartar faroles contra station). Los EV siguen saliendo de las fórmulas.}
+\end{formbox}
+
+% =====================================================================
+\section{Parámetros ajustables (los afina la Capa 3)}
+
+\begin{center}\small\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{3.6cm}>{\centering\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}X@{}}
+\toprule
+{\labelfont Parámetro} & {\labelfont Valor inicial} & {\labelfont Dónde se usa}\\ \midrule
+Reloj adaptativo & $N_{\min}$ 2000 / $\varepsilon_{\text{obj}}$ 0{,}005 / $k$ 3 / tope 1{,}5 s / $\eta$ 0{,}5 & Monte Carlo (§1.2) \\
+Umbrales de modo & 15 / 25 bb & Modo de juego (§1.4) \\
+Tamaño de apertura & 2{,}5 bb & Preflop (§1.5) \\
+Constantes de $c(x)$ & 0{,}65 / 0{,}55 / +0{,}12 & Fold equity de población (§1.7) \\
+Umbrales de tipo de apuesta & 0{,}50 / 0{,}25 & Valor, semi-farol, farol (§1.11) \\
+Regla de compromiso & $\tfrac13$ del stack & Modo intermedio (§1.11) \\
+Mezcla & 2\,\% del pozo / 0{,}35 & Aleatorizar empates de EV (§1.11) \\
+$\delta_{\max}$ & 0{,}08 & Perilla de riesgo (§1.12) \\
+Piso de rango & 0{,}02 & Reajuste del rango (§2.1) \\
+Plantillas & tabla §2.2 & Rango y $c$ (§2.1) \\
+Prior de tipos & .25/.25/.20/.15/.15 & Bayes (§2.3) \\
+$m$, $s$ & medido / 20 & Shrinkage (§2.5) \\
+$\lambda$ & 0{,}98 & Olvido (§2.6) \\
+Umbral de huella & 0{,}9 & Bot reconocido (§2.7) \\
+$\kappa$, $\rho_{\max}$, $n_{\min}$ & 1{,}0 / 0{,}8 / 8 & Peso de explotación (§3.2) \\
+$\tau$ & 0{,}7 & Ajustes por tipo (§3.4) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\end{document}
