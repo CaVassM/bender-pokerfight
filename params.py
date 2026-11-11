@@ -158,7 +158,10 @@ PARAMS = {
         # Interruptores para medir cada pieza por separado (paso 5):
         "activa": True,          # False = solo Capa 2 ("sin explotación": ρ=0, sin filtros, sin bots)
         "usar_stats": True,      # §3.2-§3.3: mezclar c_i y el ancho del rango preflop con lo medido (ρ)
-        "filtros_tipo": True,    # §3.4: no farolear a station / maníaco / aleatorio (π_t >= τ)
+        # §3.4: no farolear a station / maníaco / aleatorio (π_t >= τ). APAGADO por defecto: medido en el paso 5, con él el
+        # conservador (que el modelo clasifica como station pero se retira ~56 % ante apuestas) pasa de +247 a +41 bb/100
+        # en heads-up (−206 ±7). Decisión del usuario pendiente; se enciende con este parámetro.
+        "filtros_tipo": False,
         "contra_bots": True,     # §3.4: plantilla propia del bot del kit reconocido (huella >= 0,9)
         "chen_base": True,       # §3.4: rango preflop exacto de `base` (puntuación de Chen) cuando se lo reconoce
     },

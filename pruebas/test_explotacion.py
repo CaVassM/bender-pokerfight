@@ -176,6 +176,7 @@ def test_sin_explotacion_no_hay_lectura_ni_bot():
 
 def test_con_station_dominante_se_descartan_los_faroles():
     p = cargar_params()
+    p["explotacion"]["filtros_tipo"] = True               # apagado por defecto: aquí se prueba la regla del .tex
     p["reloj"].update({"n_min": 300, "eps_obj": 0.02})
     capa = capa_con_memoria(p)
     capa.memoria.rival("r0").log_pi.update({"station": 0.0, "tag": -6.0, "nit": -6.0, "maniaco": -6.0, "aleatorio": -6.0})
