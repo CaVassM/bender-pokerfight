@@ -20,6 +20,7 @@ Uso: bender/.venv/Scripts/python.exe bender/pruebas/robustez.py [--escenario amb
 import argparse
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -133,6 +134,7 @@ class Proxy:
 
 
 def levantar_mesa(puerto, rondas, dir_run, timeout_ms=3000):
+    shutil.rmtree(dir_run, ignore_errors=True)            # el log de Bender es append: cada corrida parte limpia
     os.makedirs(dir_run, exist_ok=True)
     abiertos, procesos = [], []
 
@@ -163,6 +165,20 @@ def lanzar_bender(lanzar, puerto, dir_run, nombre, token, retardo_s=0.0):
                    "-log", os.path.join(dir_run, nombre + ".jsonl"), "-params", ruta_params], nombre, env)
 
 
+def matar(p):
+    """Mata el proceso y sus hijos (el python del venv de Windows lanza un hijo: con kill() quedaría huérfano)."""
+    if p.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], capture_output=True)
+    else:
+        p.kill()
+    try:
+        p.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def terminar(mesa, procesos, abiertos, espera=240):
     try:
         mesa.wait(timeout=espera)
@@ -170,8 +186,7 @@ def terminar(mesa, procesos, abiertos, espera=240):
     except subprocess.TimeoutExpired:
         terminado = False
     for p in procesos:
-        if p.poll() is None:
-            p.kill()
+        matar(p)
     for a in abiertos:
         a.close()
     return terminado
@@ -225,7 +240,7 @@ def escenario_relanzar(kills, rondas, puerto):
         time.sleep(0.2)
     token = "bender-robustez"
     nombre = "bender-1"
-    bender = lanzar_bender(lanzar, puerto, dir_run, nombre, token, retardo_s=0.6)
+    bender = lanzar_bender(lanzar, puerto, dir_run, nombre, token, retardo_s=0.4)
     registros = []
     hechos = 0
     objetivo = 8                                              # primer kill tras ~8 solicitudes respondidas; luego cada ~10
@@ -237,16 +252,14 @@ def escenario_relanzar(kills, rondas, puerto):
         # ¿hay una solicitud pendiente? (más `msg` solicitar_accion que `respuesta`)
         sol = sum(1 for r in regs if r["tipo"] == "msg" and r["msg"].get("tipo") == "solicitar_accion")
         if resp >= objetivo and sol > resp:
-            bender.kill()
-            bender.wait()
+            matar(bender)
             registros.append({"kill": hechos + 1, "tras_respuestas": resp, "id_mano_pendiente": next(
                 (r["msg"]["estado"]["id_mano"] for r in reversed(regs) if r["tipo"] == "msg" and r["msg"].get("tipo") == "solicitar_accion"), "?")})
             hechos += 1
-            time.sleep(0.8)
-            nombre = f"bender-{hechos + 1}"
-            bender = lanzar_bender(lanzar, puerto, dir_run, nombre, token, retardo_s=0.6)
+            nombre = f"bender-{hechos + 1}"                   # relanzar de inmediato: la mesa sigue sin él
+            bender = lanzar_bender(lanzar, puerto, dir_run, nombre, token, retardo_s=0.4)
             objetivo = 10
-    terminado = terminar(mesa, procesos, abiertos)
+    terminado = terminar(mesa, procesos, abiertos, espera=420)
     rondas_j, fichas = resumen_mesa(dir_run)
     sesiones = []
     for i in range(1, hechos + 2):
@@ -270,7 +283,7 @@ def main():
     resultados = []
     if args.escenario in ("proxy", "ambos"):
         resultados.append(escenario_proxy("tras", [6, 15, 29], args.rondas, args.puerto))
-        resultados.append(escenario_proxy("antes", [8, 20], args.rondas, args.puerto + 10))
+        resultados.append(escenario_proxy("antes", [3, 6], args.rondas, args.puerto + 10))
     if args.escenario in ("relanzar", "ambos"):
         resultados.append(escenario_relanzar(3, args.rondas, args.puerto + 20))
     for r in resultados:
