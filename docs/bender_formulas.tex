@@ -283,8 +283,14 @@ EV(\text{apuesta})=f\,P+(1-f)\big[e'\,(P+A+A')-A\big]
 \begin{params}
 $A$ & Fichas que agrega Bender con esa acción. \\
 $A'$ & Fichas que agrega el rival que paga: lo que le falta para igualar, con tope en su stack (si no alcanza, solo pone su all-in). Se toma el rival con más fichas en juego. \\
-$e'$ & Equity de Bender si le pagan. \\
+$e'(x)$ & Equity de Bender si le pagan \textbf{esa} apuesta: contra el rango que paga ese tamaño, no contra todo el rango. Se recalcula para cada tamaño del menú (ver abajo). \\
 \end{params}
+\[
+R_{\text{paga}}(x)=\text{la fracción } c(x) \text{ más fuerte del rango del rival}
+\qquad
+e'(x)=e_R\big(R_{\text{paga}}(x)\big)
+\]
+\par\noindent{\small Ante una apuesta chica paga casi todo el rango; ante un all-in, solo su parte fuerte. Ejemplo: si ante un all-in $c=0{,}24$, $e'$ se calcula contra el 24\,\% más fuerte del rango, ordenado por la fuerza de cada combo en ese board (su equity contra una mano al azar, no contra la de Bender: el rival no conoce las cartas de Bender).}
 \uso{Se calcula para cada tamaño del menú y se compara con $EV(\text{call})$, $EV(\text{check})=e\,P$ y $EV(\text{fold})=0$. Supone una sola respuesta y sin calles extra; no modela botes laterales.}
 \ej{$P=600$, $B=300$, un rival con $c(0{,}5)=0{,}51\Rightarrow f=0{,}49$, $e'=0{,}35$: $EV=0{,}49\cdot600+0{,}51\,(0{,}35\cdot1200-300)\approx+355$.}
 \end{formbox}
@@ -317,6 +323,8 @@ a^{*}=\arg\max_{a\ \text{no descartada}} EV(a)
 \begin{params}
 Multiway & Con 3 o más rivales en la mano y $e'<0{,}50$, se descartan las apuestas (sin valor no se farolea contra varios). \\
 Compromiso & En modo intermedio, si igualar o subir cuesta más de $\tfrac13$ del stack total, se descarta: queda all-in o retirarse. \\
+All-in profundo & En modo profundo, el all-in se descarta si $e'<0{,}50$ (parámetro \code{allin\_profundo\_solo\_valor}). \\
+Subir sobre apuesta & Subir sobre una apuesta de otro solo con $e'\ge0{,}50$: sin semi-faroles ni faroles de re-subida (parámetro \code{solo\_valor\_sobre\_apuesta}). Medido en el paso 3: $+16{,}9\pm13{,}3$ bb/100 contra \code{base}. Se vuelve a evaluar con la Capa 2. \\
 Mezcla & Si la segunda mejor acción cumple $EV_1-EV_2<0{,}02\cdot\max(P,\mathrm{bb})$, $EV_2\ge0$ y ninguna de las dos es retirarse, se elige la segunda con probabilidad $0{,}35$. Así Bender no es predecible. \\
 \end{params}
 \end{formbox}
@@ -489,7 +497,7 @@ w_{\text{paga}}(h)=\begin{cases}1 & h\in\text{top}(100\,\hat p_{\text{VPIP}})\se
 $\hat p_{\text{VPIP}}$ & Estimado de qué \% de manos juega (§2.5). \\
 $\hat p_{\text{PFR}}$ & Estimado de qué \% de manos sube preflop. \\
 \end{params}
-\uso{Quien solo paga suele no tener sus mejores manos (con esas habría subido), así que el top del PFR entra con peso 0{,}3 (\emph{provisional}: a veces paga con una mano fuerte para tender una trampa). Es el punto de partida del rango antes del flop. Si alguien sube después (re-raise), el rango se estrecha con la plantilla. Mientras $\rho$ sea bajo (§3.2), se mezcla con el top \% de población de esa posición.}
+\uso{Quien solo paga suele no tener sus mejores manos (con esas habría subido), así que el top del PFR entra con peso 0{,}3 (\emph{provisional}: a veces paga con una mano fuerte para tender una trampa). Es el punto de partida del rango antes del flop. Quien sube preflop parte del top \% de su posición (§1.5), y cada re-subida multiplica el ancho por $0{,}45$ (\emph{provisional}). Mientras $\rho$ sea bajo (§3.2), se mezcla con el top \% de población de esa posición.}
 \end{formbox}
 
 % =====================================================================
@@ -558,6 +566,8 @@ Constantes de $c(x)$ & 0{,}65 / 0{,}55 / +0{,}12 & Fold equity de población (§
 Umbrales de tipo de apuesta & 0{,}50 / 0{,}25 & Valor, semi-farol, farol (§1.11) \\
 Regla de compromiso & $\tfrac13$ del stack & Modo intermedio (§1.11) \\
 Mezcla & 2\,\% del pozo / 0{,}35 & Aleatorizar empates de EV (§1.11) \\
+Reglas de solo valor & ambas activas & All-in profundo y subir sobre apuesta (§1.11) \\
+Estrechar por re-subida & $\times0{,}45$ & Rango preflop (§2.8) \\
 $\delta_{\max}$ & 0{,}08 & Perilla de riesgo (§1.12) \\
 Piso de rango & 0{,}02 & Reajuste del rango (§2.1) \\
 Plantillas & tabla §2.2 & Rango y $c$ (§2.1) \\

@@ -12,6 +12,7 @@ import traceback
 from capa1 import Capa1
 from estado import (EstadoPublico, SeguimientoMesa, Turno, accion_segura, carta_de_dict,
                     texto_cartas)
+from rivales import Memoria, Observador
 
 
 class Bender:
@@ -21,12 +22,28 @@ class Bender:
         self.mi_id = None
         self.silla = -1
         self.mesa = SeguimientoMesa()
-        self.capa1 = Capa1(params)
+        # Capa 2: memoria por ID de rival y el observador que la alimenta con TODOS los mensajes.
+        self.memoria = self.obs = None
+        if params["rivales"]["activa"]:
+            self.memoria = Memoria(params)
+            self.obs = Observador(params, self.memoria)
+        self.capa1 = Capa1(params, memoria=self.memoria)
+
+    def _observar(self, mensaje):
+        """Alimenta la memoria de rivales. Un fallo aquí nunca puede afectar la decisión."""
+        if self.obs is None:
+            return
+        try:
+            self.obs.al_mensaje(mensaje)
+        except Exception:
+            self.registro.escribir("error", donde="observador", traza=traceback.format_exc())
 
     # --- Conexión ---
     def al_conectar(self, id_jugador, silla, reconexion):
         self.mi_id = id_jugador
         self.silla = silla
+        if self.obs is not None:
+            self.obs.mi_id = id_jugador
         # Si reconectamos dentro del mismo proceso conservamos las cartas de la
         # mano en curso. Si el proceso es nuevo (kill + relanzar) no hay cartas
         # hasta el próximo mano_inicio: se juega la acción segura.
@@ -34,6 +51,7 @@ class Bender:
     # --- Mensajes informativos ---
     def al_mensaje(self, mensaje):
         tipo = mensaje.get("tipo")
+        self._observar(mensaje)
         if tipo == "mano_inicio":
             estado = EstadoPublico.de_dict(mensaje.get("estado"))
             cartas = [carta_de_dict(c) for c in mensaje.get("cartas") or []]
@@ -54,6 +72,7 @@ class Bender:
         inicio = time.perf_counter()
         if self.params["debug"]["retardo_s"] > 0:
             time.sleep(self.params["debug"]["retardo_s"])      # solo para pruebas
+        self._observar(mensaje)           # las acciones que llegaron desde el último `estado`
         estado = EstadoPublico.de_dict(mensaje.get("estado"))
         validas = mensaje.get("acciones_validas") or []
         self.mesa.ultimo_estado = estado

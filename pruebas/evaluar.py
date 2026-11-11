@@ -94,10 +94,24 @@ def archivo_params(dir_salida, params_usuario):
     return ruta
 
 
+def params_corrida(ruta_base, dir_run):
+    """Copia de los parámetros de la evaluación con la memoria de rivales (Capa 2) en la carpeta de ESTA
+    corrida: ni las mesas en paralelo ni dos evaluaciones se pisan, y no hay "memoria heredada" entre
+    corridas (cada mesa de evaluación empieza sin conocer a nadie, como la primera ronda del torneo)."""
+    with open(ruta_base, encoding="utf-8") as f:
+        p = json.load(f)
+    p.setdefault("rivales", {})["dir"] = os.path.join(dir_run, "rivales")
+    ruta = os.path.join(dir_run, "params-bender.json")
+    with open(ruta, "w", encoding="utf-8") as f:
+        json.dump(p, f)
+    return ruta
+
+
 # --- Vía 1: arena heads-up ------------------------------------------------------------------------------
 
 def correr_hu(rival, semilla, manos, dir_run, ruta_params, historial):
     os.makedirs(dir_run, exist_ok=True)
+    ruta_params = params_corrida(ruta_params, dir_run)
     log = os.path.join(dir_run, "bender.jsonl")
     config = {
         "nombre": f"hu-{rival}-{semilla}", "formato": "round-robin", "puntuacion": "neto",
@@ -147,6 +161,7 @@ def leer_hu(ruta, duracion):
 def correr_mesa(indice, rivales, orden, rondas, puerto, dir_run, ruta_params):
     """Una mesa: Bender + 4 rivales, conectados en el orden `orden` (rota los asientos)."""
     os.makedirs(dir_run, exist_ok=True)
+    ruta_params = params_corrida(ruta_params, dir_run)
     procesos, archivos = [], []
 
     def lanzar(comando, nombre, env=None):

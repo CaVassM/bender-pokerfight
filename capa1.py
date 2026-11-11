@@ -69,8 +69,10 @@ def ev_apuesta(f, P, e_prima, A, A_prima):
 
 
 class Capa1:
-    def __init__(self, params, rng=None):
+    def __init__(self, params, rng=None, memoria=None):
         self.p = params
+        self.memoria = memoria                 # Capa 2: creencias por rival (None = rival promedio para todos)
+        self._pis = {}
         self.rng = rng or random.Random(params["capa1"]["semilla"])       # para el Monte Carlo
         self.rng_mezcla = random.Random(self.rng.random())                # aparte, para la mezcla de §1.11
         self.cache = POB.CacheCategorias()
@@ -120,7 +122,11 @@ class Capa1:
             return {r.id: R.rango_alazar(muertas) for r in turno.rivales}
         evs = POB.eventos(turno.estado.historial)
         pos = posiciones(turno.estado)
-        return {r.id: POB.rango_de_rival(r.id, pos.get(r.id, ""), evs, board, mano, self.p, self.cache)
+        self._pis = {}
+        if self.memoria is not None:
+            self._pis = {r.id: self.memoria.pi(r.id) for r in turno.rivales}      # §2.4: creencia por rival
+        return {r.id: POB.rango_de_rival(r.id, pos.get(r.id, ""), evs, board, mano, self.p, self.cache,
+                                         pi=self._pis.get(r.id))
                 for r in turno.rivales}
 
     def _equity(self, mano, board, rangos, umbrales, mesa, t_max):
@@ -182,6 +188,15 @@ class Capa1:
         # --- Rangos de los rivales y equity ---
         rangos = self._rangos_rivales(turno, mano, board)
         info["rangos"] = {i: {"combos": len(r), "pct": round(100.0 * len(r) / 1326, 1)} for i, r in rangos.items()}
+        if self.memoria is not None:                      # Capa 2: qué cree Bender de cada rival
+            info["rivales"] = {}
+            for i in rangos:
+                riv = self.memoria.rival(i)
+                pi = self._pis.get(i, {})
+                info["rivales"][i] = {"tipo": max(pi, key=pi.get) if pi else None,
+                                      "pi": {t: round(v, 2) for t, v in pi.items()},
+                                      "bot": riv.bot_reconocido(), "manos": riv.contadores["manos"],
+                                      "vpip": round(riv.stats["vpip"].p, 2), "pfr": round(riv.stats["pfr"].p, 2)}
         t_max = t_max_de_reloj(p["reloj"], mesa.manos_mesa, mesa.segundos_mesa)
         info["t_max"] = round(t_max, 3)
 
@@ -291,7 +306,7 @@ class Capa1:
         if not board:
             return POB.c_de_rango_preflop(rango, x, ya, p["pob"])
         if rival.id not in self._c_medio:
-            plantilla = POB.plantilla_mezcla(p["capa1"]["pi_defecto"], p)
+            plantilla = POB.plantilla_mezcla(self._pis.get(rival.id) or p["capa1"]["pi_defecto"], p)
             self._c_medio[rival.id] = POB.c_sigue(rango, board, plantilla, self.cache)
         return POB.c_de_rango_postflop(self._c_medio[rival.id], x, ya, p["pob"])
 
@@ -302,22 +317,21 @@ class Capa1:
         y contra eso la equity de Bender es menor. `cs` son los c_i de esta apuesta.
         Aproximación propia (el .tex no fija el multiway): pagan los n_pago rivales con mayor c_i,
         con n_pago = max(1, redondeo(Σ c_i)). Preflop cada pagador usa su fracción c_i más fuerte;
-        postflop su rango se reajusta con P(paga|categoría) de la plantilla (§2.1), que ya está
-        calibrada para x≈1/2 y no cambia con el tamaño. Se memoriza por (pagadores, c_i) para no
-        repetir la simulación cuando dos tamaños dan el mismo rango de pago.
+        postflop también: la fracción c_i más fuerte de su rango, ordenada por la fuerza de cada
+        combo en ese board (equity contra una mano al azar, §1.9). Se memoriza por (pagadores, c_i)
+        para no repetir la simulación cuando dos tamaños dan el mismo rango de pago.
         """
         p = self.p
         n_pago = max(1, min(len(responden), int(round(sum(cs.values())))))
         pagan = sorted(responden, key=lambda r: -cs[r.id])[:n_pago]
-        clave = (tuple(r.id for r in pagan), None if board else tuple(round(cs[r.id], 2) for r in pagan))
+        clave = (tuple(r.id for r in pagan), tuple(round(cs[r.id], 2) for r in pagan))
         if clave in cache:
             return cache[clave]
-        plantilla = POB.plantilla_mezcla(p["capa1"]["pi_defecto"], p)
         rangos_pago = []
         for r in pagan:
             base = rangos[r.id]
-            if board:
-                rp = POB.rango_de_pago(base, board, plantilla, self.cache, p["rango"]["piso"]) if not base.vacio() else base
+            if board:      # §1.9: la fracción c(x) más fuerte, ordenada por la equity de cada combo contra una mano al azar
+                rp = POB.rango_de_pago_por_fuerza(base, board, cs[r.id], self.cache)
             else:
                 rp = POB.top_fraccion(base, cs[r.id])
             rangos_pago.append(rp)

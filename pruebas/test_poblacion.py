@@ -50,9 +50,20 @@ def test_prob_apuesta_por_tipo():
 
 # --- §2.1 el ejemplo del .tex: J♦7♣2♠, héroe A♠J♥, rival con el top 25 % ------------------------
 
+# Las 48 clases (340 combos) del top 25 % del ejemplo, tal como las dio el equipo. Lista FIJA: no
+# depende de nuestro ranking de 169 clases.
+TOP25_DEL_TEX = ("AA KK QQ JJ TT 99 88 AKs 77 AQs AKo AJs ATs AQo AJo KQs A9s 66 KJs ATo A8s KTs KQo A7s 55 QJs KJo "
+                 "A9o K9s A5s A8o A6s KTo QTs A4s A7o A3s K8s QJo JTs A6o K7s A5o K9o A2s Q9s QTo A4o").split()
+
+
+def test_la_lista_del_ejemplo_tiene_48_clases_y_340_combos():
+    assert len(TOP25_DEL_TEX) == 48 and len(set(TOP25_DEL_TEX)) == 48
+    assert sum(R.n_combos(c) for c in TOP25_DEL_TEX) == 340
+
+
 def ejemplo():
     mano, board = cs("As Jh"), cs("Jd 7c 2s")
-    rango = R.rango_de_clases(R.clases_top(25), C.mascara(mano + board))
+    rango = R.rango_de_clases(TOP25_DEL_TEX, C.mascara(mano + board))
     cache = POB.CacheCategorias()
     por_cat = {}
     for combo in rango.combos:
@@ -90,14 +101,31 @@ def test_ejemplo_2_1_tras_pagar_el_aire_baja_del_66_al_19_por_ciento():
     assert abs(pago.total - 1.0) < 1e-9
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Con el ranking propio (decisión del usuario: se mantiene) el top 25 % trae 334 combos en vez de 340 y "
-    "K7s, A2s y 44 entran al rango: salen 43 fuertes / 51 medios / 162 aire en vez de 43 / 45 / 171. "
-    "Diferencia en media (6) y aire (9) por encima de ±5; ver reporte del paso 3."))
 def test_ejemplo_2_1_medios_y_aire_dentro_de_5_combos():
     _, _, _, _, por_cat = ejemplo()
     assert abs(por_cat.get("media", 0) - 45) <= 5
     assert abs(por_cat.get("aire", 0) - 171) <= 5
+
+
+def test_e_prima_postflop_ordena_por_fuerza_contra_mano_al_azar_y_no_por_la_mano_de_bender():
+    """§1.9: R_paga(x) = fracción c(x) más fuerte del rango, ordenada por la equity de cada combo
+    contra una mano al azar en ese board."""
+    mano, board, rango, cache, _ = ejemplo()
+    b = tuple(sorted(board))
+    paga = POB.rango_de_pago_por_fuerza(rango, board, 0.25, cache)
+    assert abs(paga.total - 0.25 * rango.total) < 1e-6
+    fuerzas = {c: cache.fuerza(c, b) for c in rango.combos}
+    corte = min(fuerzas[c] for c in paga.combos)
+    fuera = [fuerzas[c] for c in rango.combos if c not in set(paga.combos)]
+    assert max(fuera) <= corte + 1e-9                    # todo lo que paga es más fuerte que lo que no paga
+    # el trío de sietes y los reyes/reinas arriba; el aire con A alto, abajo
+    clases_paga = paga.conteo_por_clase()
+    assert "AA" in clases_paga and "KK" in clases_paga and "AKs" not in clases_paga
+    # River: ordenado exactamente por el rank del evaluador
+    river = cs("Jd 7c 2s 9h 4d")
+    rb = tuple(sorted(river))
+    c1, c2 = tuple(sorted(cs("Ad Ah"))), tuple(sorted(cs("5s 3s")))
+    assert cache.fuerza(c1, rb) > cache.fuerza(c2, rb)
 
 
 # --- §2.8 rango preflop y re-subidas ---------------------------------------------------------------

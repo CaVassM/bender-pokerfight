@@ -15,6 +15,8 @@ Todo se recalcula desde el historial de la mano en cada decisión (sin estado), 
 que una reconexión a mitad de mano no rompe nada.
 """
 
+import random
+
 import cartas as C
 import rangos as R
 
@@ -92,12 +94,17 @@ def c_de_rango_preflop(rango, x, ya_puso, p):
     return min(0.98, dentro / rango.total)
 
 
+N_FUERZA = 64        # simulaciones por combo para estimar su equity contra una mano al azar (flop y turn)
+
+
 class CacheCategorias:
-    """Memoriza la categoría de cada (combo, board): categoria_mano recorre las
-    cartas que faltan para contar outs y es lo más caro del modelo."""
+    """Memoriza, por (combo, board), la categoría de la mano (categoria_mano recorre las cartas que
+    faltan para contar outs y es lo más caro del modelo) y su fuerza (equity contra una mano al azar)."""
 
     def __init__(self):
         self._d = {}
+        self._f = {}
+        self._rng = {}
 
     def de(self, combo, board):
         clave = (combo, board)
@@ -105,6 +112,62 @@ class CacheCategorias:
         if v is None:
             v = self._d[clave] = R.categoria_mano(combo, board)
         return v
+
+    def fuerza(self, combo, board):
+        """Fuerza del combo en ese board = su equity contra UNA MANO AL AZAR (§1.9: ordena el rango que
+        paga; el rival no conoce las cartas de Bender). River: exacta, monótona en el rank de la mano.
+        Flop y turn: Monte Carlo con N_FUERZA simulaciones y semilla fija por board (reproducible)."""
+        clave = (combo, board)
+        v = self._f.get(clave)
+        if v is None:
+            if len(board) == 5:
+                v = 1.0 - C.evaluar7(combo[0], combo[1], *board) / 7463.0
+            else:
+                rng = self._rng.get(board)
+                if rng is None:
+                    rng = self._rng[board] = random.Random(hash(board) & 0xFFFFFFFF)
+                v = _equity_vs_azar(combo, board, rng, N_FUERZA)
+            self._f[clave] = v
+        return v
+
+
+def _equity_vs_azar(combo, board, rng, n):
+    """Equity de `combo` contra una mano al azar en un board de 3 o 4 cartas (Monte Carlo)."""
+    h1, h2 = combo
+    base = C.mascara(list(combo) + list(board))
+    faltan = 5 - len(board)
+    rnd, ev7, acum = rng.random, C.evaluar7, 0.0
+    for _ in range(n):
+        usadas, extra = base, []
+        for _ in range(faltan + 2):
+            c = int(rnd() * 52)
+            while (usadas >> c) & 1:
+                c = int(rnd() * 52)
+            usadas |= 1 << c
+            extra.append(c)
+        completo = list(board) + extra[:faltan]
+        mio = ev7(h1, h2, *completo)
+        rival = ev7(extra[faltan], extra[faltan + 1], *completo)
+        acum += 1.0 if mio < rival else (0.5 if mio == rival else 0.0)
+    return acum / n
+
+
+def rango_de_pago_por_fuerza(rango, board, frac, cache):
+    """R_paga(x) postflop (§1.9): la fracción `frac` = c(x) MÁS FUERTE del rango del rival, ordenada por la
+    fuerza de cada combo en ese board (su equity contra una mano al azar)."""
+    if frac >= 1.0 or rango.vacio():
+        return rango
+    board = tuple(sorted(board))
+    items = sorted(zip(rango.combos, rango.pesos), key=lambda it: -cache.fuerza(it[0], board))
+    meta = frac * rango.total
+    acumulado, out = 0.0, []
+    for combo, w in items:
+        if acumulado >= meta:
+            break
+        usar = min(w, meta - acumulado)
+        out.append((combo, usar))
+        acumulado += usar
+    return R.Rango(out) if out else rango
 
 
 def c_sigue(rango, board, plantilla, cache):

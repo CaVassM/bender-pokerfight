@@ -242,7 +242,8 @@ def test_multiway_descarta_apuestas_sin_valor():
     turno = spot("7h 6h", "Ks 9d 2c", rivales=((9000, 0), (9000, 0), (9000, 0)), yo=(9000, 0), pozo=900)
     _, _, info = decidir(turno)
     apuestas = [f for f in info["tabla_ev"] if f["tipo"] in ("bet", "raise", "allin")]
-    assert apuestas and all(f["descartada"] and "multiway" in f["descartada"] for f in apuestas)
+    assert apuestas and all(f["descartada"] for f in apuestas)
+    assert any("multiway" in f["descartada"] for f in apuestas)               # (el all-in puede caer por la regla de solo valor)
 
 
 def test_compromiso_en_modo_intermedio():

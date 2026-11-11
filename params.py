@@ -45,9 +45,9 @@ PARAMS = {
         "compromiso_fraccion": 1 / 3,   # modo intermedio: tope de stack por call/subida
         "mezcla_ev_frac": 0.02,      # |EV1-EV2| < 0,02·max(P, bb) activa la mezcla
         "mezcla_prob": 0.35,         # probabilidad de elegir la segunda mejor
-        # --- Variantes de regla que NO están en el .tex (apagadas = comportamiento del .tex) ---
-        "allin_profundo_solo_valor": False,   # en modo profundo, el all-in se descarta si e' < umbral_valor
-        "solo_valor_sobre_apuesta": False,    # subir sobre una apuesta ajena solo si e' >= umbral_valor
+        # --- Reglas de solo valor (§1.11, activas por decisión del equipo tras el paso 3) ---
+        "allin_profundo_solo_valor": True,    # en modo profundo, el all-in se descarta si e' < umbral_valor
+        "solo_valor_sobre_apuesta": True,     # subir sobre una apuesta ajena solo si e' >= umbral_valor
     },
     # --- §1.12 Perilla de riesgo del torneo ---------------------------------------
     "riesgo": {"delta_max": 0.08, "g": 0.0},   # g=0 por ahora (lo define la Capa 3)
@@ -71,17 +71,27 @@ PARAMS = {
     },
     # --- §2.3 Tipos de rival ------------------------------------------------------
     "tipos": ["nit", "tag", "station", "maniaco", "aleatorio"],
-    "prior_tipos": {"nit": .25, "tag": .25, "station": .20, "maniaco": .15, "aleatorio": .15},
+    # CALIBRADO con los 6 bots de entrenamiento del kit (pruebas/calibrar.py sobre calib-1: 90 mesas, 100 manos):
+    # base, estadistico, bandido, espia = TAG; conservador = station; aleatorio = aleatorio (+0,5 de suavizado).
+    # El .tex trae .25/.25/.20/.15/.15 (provisional). Es el prior de la población de bots DEL KIT; los bots
+    # que escriban los demás equipos pueden ser más variados.
+    "prior_tipos": {"nit": .06, "tag": .53, "station": .18, "maniaco": .06, "aleatorio": .17},
     "piso_pi": 0.01,
     # P(accion | tipo) preflop por mano: F se retira, C entra pagando, R entra subiendo
+    # CALIBRADO (pruebas/calibrar.py, calib-1): tag = promedio medido de base/estadistico/bandido/espia;
+    # station = conservador; aleatorio = aleatorio. nit y maníaco no tienen bot en el kit: conservan la tabla del .tex.
+    # La tabla del .tex (tag F.78/C.06/R.16, station F.45/C.50/R.05) hacía creer que base, estadistico y espia eran
+    # "station" (los bots del kit pagan ~27 % de las manos, no 6 %) y Bender los trataba como rivales que pagan de todo.
     "preflop_verosimilitud": {
-        "F": {"nit": .88, "tag": .78, "station": .45, "maniaco": .35, "aleatorio": .33},
-        "C": {"nit": .04, "tag": .06, "station": .50, "maniaco": .15, "aleatorio": .33},
-        "R": {"nit": .08, "tag": .16, "station": .05, "maniaco": .50, "aleatorio": .33},
+        "F": {"nit": .88, "tag": .65, "station": .06, "maniaco": .35, "aleatorio": .30},
+        "C": {"nit": .04, "tag": .26, "station": .92, "maniaco": .15, "aleatorio": .14},
+        "R": {"nit": .08, "tag": .09, "station": .02, "maniaco": .50, "aleatorio": .56},
     },
     # --- §2.5 Estadísticas Beta (shrinkage) ---------------------------------------
     "beta": {
-        "m": {"vpip": 0.30, "pfr": 0.12, "sigue_chica": 0.45, "sigue_grande": 0.35},  # provisional: se mide en Capa 2
+        # m CALIBRADO (promedio de los 6 bots de entrenamiento, cada uno pesa igual; pruebas/calibrar.py, calib-1).
+        # El .tex trae VPIP 0,30 provisional; PFR, sigue_chica y sigue_grande no tenían valor en el .tex.
+        "m": {"vpip": 0.455, "pfr": 0.143, "sigue_chica": 0.692, "sigue_grande": 0.545},
         "s": {"vpip": 20, "pfr": 20, "sigue_chica": 20, "sigue_grande": 20},
         "x_chica_max": 0.6,       # apuesta chica: x <= 0,6; grande: x > 0,6
     },
@@ -91,14 +101,21 @@ PARAMS = {
     "huella": {
         "cajas": [0.33, 0.4, 0.5, 0.6, 0.66, 0.75, 0.9, 1.0],
         "tolerancia": 0.03,
-        "prior": {"propio": 0.5, "base": 0.1, "novato": 0.1, "espia": 0.1, "bandido": 0.1, "estadistico": 0.1},
-        # columnas: .33 .4 .5 .6 .66 .75 .9 1.0 otro  (provisional: se mide con los bots)
+        # (los priors se normalizan al crear cada Rival)
+        "prior": {"propio": 0.5, "base": 0.1, "novato": 0.1, "espia": 0.1, "bandido": 0.1, "estadistico": 0.1,
+                  "aleatorio": 0.1},
+        # columnas: .33 .4 .5 .6 .66 .75 .9 1.0 otro
+        # CALIBRADO midiendo a cada bot en 90 mesas (1 803 apuestas de base, 914 de espia, 835 de estadistico, 633 de
+        # bandido, 70 de aleatorio; pruebas/calibrar.py, calib-1), con suavizado de Laplace y piso 0,01.
+        # "novato" queda con la fila del .tex (leída del código): es un rival de RESERVA, no se usa para calibrar.
+        # "conservador" nunca apuesta: no tiene huella. Ojo: el .tex decía base .4=.40 y .75=.52; midiendo, .4=.77 y .75=.11.
         "tabla": {
-            "base":        [.01, .40, .01, .01, .01, .52, .01, .01, .02],
+            "base":        [.009, .766, .063, .009, .009, .114, .009, .009, .009],
             "novato":      [.20, .01, .44, .01, .01, .29, .01, .01, .02],
-            "espia":       [.01, .01, .44, .24, .01, .01, .14, .12, .02],
-            "bandido":     [.01, .01, .44, .01, .29, .01, .01, .20, .02],
-            "estadistico": [.01, .01, .30, .08, .08, .08, .08, .08, .28],
+            "espia":       [.010, .010, .328, .465, .010, .010, .100, .059, .010],
+            "bandido":     [.009, .009, .341, .009, .567, .009, .009, .035, .009],
+            "estadistico": [.010, .010, .183, .114, .123, .154, .065, .026, .315],
+            "aleatorio":   [.010, .033, .020, .033, .020, .010, .010, .020, .844],
             "propio":      [1 / 9] * 9,
         },
         "umbral": 0.9,
@@ -118,6 +135,12 @@ PARAMS = {
         "min_pct_rango": 3.0,        # el rango de un re-subidor nunca baja de este top %
         "pct_bb_sin_posicion": 20.0,  # top % de quien sube desde una ciega grande (no está en §1.5)
         "semilla": None,             # None = azar del sistema; un entero hace reproducible la mezcla y el Monte Carlo
+    },
+    # --- Capa 2: memoria por ID de rival (rivales.py) ---------------------------------
+    "rivales": {
+        "activa": True,        # False = la Capa 1 sola (rival promedio para todos)
+        "dir": None,           # carpeta de la memoria; None = bender/datos/rivales (ignorada por git)
+        "persistir": True,     # guardar cada rival en disco al terminar cada mano
     },
     # --- Registro -----------------------------------------------------------------
     "registro": {"mensajes": True},  # False = no guarda cada mensaje crudo (corridas largas de evaluación)

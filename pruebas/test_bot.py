@@ -11,6 +11,7 @@ def hacer_bot(tmp_path, capa1=False):
     registro = Registro(str(tmp_path / "s.jsonl"), eco_stderr=False)
     params = cargar_params()
     params["capa1"]["activa"] = capa1
+    params["rivales"]["persistir"] = False          # las pruebas no escriben en datos/rivales
     bot = Bender(params, registro)
     bot.al_conectar("yo", 0, False)
     return bot, registro
