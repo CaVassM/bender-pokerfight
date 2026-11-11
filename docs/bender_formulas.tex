@@ -373,7 +373,7 @@ $c$ & Probabilidad de que el rival \textbf{siga} (pague o suba): sale de la mism
 \begin{tabular}{@{}l|ccc|ccc|ccc|ccc@{}}\toprule
 & \multicolumn{3}{c|}{Fuerte} & \multicolumn{3}{c|}{Media} & \multicolumn{3}{c|}{Proyecto} & \multicolumn{3}{c}{Aire}\\
 Tipo & ret & paga & sube & ret & paga & sube & ret & paga & sube & ret & paga & sube\\ \midrule
-Promedio / TAG & .05 & .55 & .40 & .35 & .60 & .05 & .25 & .60 & .15 & .85 & .07 & .08\\
+TAG (\emph{calibrado}) & .14 & .51 & .34 & .29 & .66 & .05 & .57 & .41 & .02 & .76 & .24 & .00\\
 Nit & .05 & .65 & .30 & .50 & .48 & .02 & .55 & .42 & .03 & .93 & .05 & .02\\
 Station & .02 & .88 & .10 & .10 & .88 & .02 & .10 & .85 & .05 & .30 & .68 & .02\\
 Maníaco & .02 & .38 & .60 & .15 & .55 & .30 & .10 & .45 & .45 & .40 & .25 & .35\\
@@ -386,7 +386,7 @@ Proyecto & Sin pareja pero con 8 o más outs (proyecto de color o de escalera ab
 Aire & Todo lo demás (un gutshot cuenta como aire). \\
 ret / paga / sube & Se retira / iguala / sube. Cada trío suma 1. “Sigue” = paga + sube. \\
 \end{params}
-\uso{Cuando nadie apostó, se usa $P(\text{apuesta}\mid\text{cat})$ del rival promedio: fuerte .65, media .35, proyecto .45, aire .25 (pasar = 1 menos eso). Por tipo se multiplica: nit $\times0{,}7$, station $\times0{,}6$, maníaco $\times1{,}5$ (tope .95); aleatorio .50 en todo. La fila promedio da los números de S1 para “sigue” (.95, .65, .15).}
+\uso{Cuando nadie apostó, se usa $P(\text{apuesta}\mid\text{cat})$: TAG (\emph{calibrado}) apuesta con fuerte .90, media .54, proyecto .22, aire .19 (pasar = 1 menos eso). Los otros tipos parten de la fila provisional del rival promedio (fuerte .65, media .35, proyecto .45, aire .25) y se multiplica por tipo: nit $\times0{,}7$, station $\times0{,}6$, maníaco $\times1{,}5$ (tope .95); aleatorio .50 en todo. TAG se midió con las cartas de todos los jugadores en 4\,800 manos de \code{base}, \code{estadistico}, \code{bandido} y \code{espia}, con \emph{shrinkage} $s=20$ por fila hacia la fila provisional. El ejemplo de §2.1 usa la fila provisional del rival promedio (“sigue” .95, .65, .15). \textbf{Station, nit, maníaco y aleatorio son plantillas genéricas: un bot concreto que se comporte distinto se modela con su propia plantilla (§3.4), no cambiando la genérica.}}
 \end{formbox}
 
 \subsection{Bayes sobre el tipo de rival}
@@ -404,10 +404,10 @@ $\lambda$ & Olvido (§2.6). Con $\lambda=1$ es Bayes puro. \\
 \end{params}
 \begin{center}\small\renewcommand{\arraystretch}{1.18}
 \begin{tabular}{@{}lccccc@{}}\toprule
-Preflop (TAG y station \emph{calibrados}) & Nit & TAG & Station & Maníaco & Aleatorio\\ \midrule
-Se retira (F) & .88 & .65 & .06 & .35 & .33\\
-Entra pagando (C) & .04 & .26 & .92 & .15 & .33\\
-Entra subiendo (R) & .08 & .09 & .02 & .50 & .33\\ \bottomrule
+Preflop (TAG, station y aleatorio \emph{calibrados}) & Nit & TAG & Station & Maníaco & Aleatorio\\ \midrule
+Se retira (F) & .88 & .65 & .06 & .35 & .30\\
+Entra pagando (C) & .04 & .26 & .92 & .15 & .14\\
+Entra subiendo (R) & .08 & .09 & .02 & .50 & .56\\ \bottomrule
 \end{tabular}\end{center}
 \uso{Se trabaja en logaritmos (evita \emph{underflow}). Para normalizar: restar el máximo, exponenciar y dividir por la suma. Piso: ningún $\pi_t$ baja de 0{,}01.}
 \ej{Prior + “entra pagando”: station pasa de 20\,\% a 50{,}6\,\% en una mano.}
@@ -544,10 +544,10 @@ $\rho_i$ & Peso de explotación de esa estadística (§3.2). \\
 \begin{params}
 Nit & Robarle las ciegas seguido; respetar sus subidas grandes (su rango ya es estrecho por §2.1). \\
 TAG & Juego sólido de Capa 1, sin ajustes extra. \\
-Station & No farolearle nunca; apuestas de valor con $x\approx1$ incluso con manos medias-fuertes. \\
+Station & Apuestas de valor con $x\approx1$ incluso con manos medias-fuertes. El filtro “no farolearle nunca” está apagado por defecto (\code{filtros\_tipo}): el EV con el $c_i$ medido ya decide si un farol rinde. \\
 Maníaco & No farolearle; pagar más liviano (su rango de subida es ancho) y dejar que apueste él. \\
 Aleatorio & Apuestas de valor finas y frecuentes; no darle crédito a sus subidas. \\
-Bot del kit & Con $P(\text{bot})\ge0{,}9$: contraestrategia desde su código (por ejemplo, \code{base} con $z=0{,}75$ tiene mano fuerte y nunca farolea). \\
+Bot del kit & Con $P(\text{bot})\ge0{,}9$, su plantilla medida reemplaza a la mezcla de tipos. Para \code{base}, además, el rango preflop sale de su código: sube con Chen $\ge9$ y paga con $5\le$ Chen $<9$. \code{conservador} se reconoce por comportamiento (nunca apuesta). \\
 $\tau$ & Umbral de certeza: 0{,}7. \emph{Provisional}. \\
 \end{params}
 \uso{Estas reglas solo filtran el menú (por ejemplo, descartar faroles contra station). Los EV siguen saliendo de las fórmulas.}
