@@ -66,7 +66,9 @@ def main():
     if resto and resto[0] == "--":
         resto = resto[1:]
 
-    sucio = git("status", "--porcelain")
+    # Solo importan los cambios en código/parámetros: la documentación (docs/, *.md) no afecta una medición.
+    sucio = "\n".join(l for l in git("status", "--porcelain").splitlines()
+                      if not l[3:].startswith("docs/") and not l.endswith(".md"))
     if sucio and not args.sucio:
         sys.exit("hay cambios sin commitear en bender/ (haz commit primero, o usa --sucio):\n" + sucio)
     if sucio:

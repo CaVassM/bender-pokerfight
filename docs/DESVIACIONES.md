@@ -43,6 +43,18 @@ Ver `bender/datos/calibracion.json` y `pruebas/calibrar.py`. Se calibraron con l
 | prior de tipos | .25/.25/.20/.15/.15 | .06/.53/.18/.06/.17 (nit/tag/station/maníaco/aleatorio) | base, estadistico, bandido, espia = TAG; conservador = station; aleatorio = aleatorio. Es la población DE BOTS DEL KIT. |
 | P(F/C/R \| tipo) preflop | tag .78/.06/.16, station .45/.50/.05 | tag .65/.26/.09, station .06/.92/.02, aleatorio .30/.14/.56 (nit y maníaco: del .tex) | Con la tabla del .tex Bender creía que base, estadistico y espia eran "station" (los bots del kit pagan ~27 % de las manos, no 6 %). |
 
+| Plantillas postflop de §2.2 (TAG = "Promedio", station) | TAG: fuerte .05/.55/.40, media .35/.60/.05, proyecto .25/.60/.15, aire .85/.07/.08; apuesta .65/.35/.45/.25. Station: fuerte .02/.88/.10, aire .30/.68/.02 | TAG: fuerte .14/.51/.34, media .29/.66/.05, proyecto .57/.41/.02, aire .76/.24/.00; apuesta .90/.54/.22/.19. Station: ~.56/.44/.00 en las 4 categorías; apuesta ≈ 0 | 4 800 manos de 6 bots con las cartas de todos; shrinkage s=20 por fila hacia el .tex (que queda en `params.PLANTILLAS_TEX`). El `conservador` se retira ~56 % ante una apuesta SIN MIRAR su mano. |
+| Plantillas por bot (§3.4 contraestrategia) | — | `params["plantillas_bot"]` y `["prob_apuesta_bot"]` para los 6 bots de entrenamiento | Mismo historial; shrinkage s=20 hacia la plantilla calibrada de su grupo. Se usan cuando la huella reconoce al bot (>= 0,9). |
+
+## Explotación (paso 5)
+
+| # | Dónde | Qué hace el código | Por qué |
+|---|---|---|---|
+| 18 | §3.4 bot del kit | "Contraestrategia desde su código" = (a) su plantilla postflop medida en lugar de la mezcla de tipos; (b) para `base`, su rango preflop exacto: sube con Chen ≥ 9 y paga con 5 ≤ Chen < 9 (puntuación portada de `bots/base/main.go`). | El .tex pide usar la lógica del bot; con datos medidos y el código de `base` se vuelve concreto. Solo con huella ≥ 0,9. |
+| 19 | §3.4 filtros por tipo | Solo "no farolear" a station / maníaco / aleatorio, y solo si TODOS los rivales de la mano cumplen π_t ≥ τ. "Aleatorio: no darle crédito a sus subidas" = sus subidas no estrechan su rango. Nit y TAG: sin ajuste. | El .tex dice que estas reglas solo filtran el menú. Los matices (x≈1 con station, pagar liviano al maníaco) ya salen de las fórmulas. |
+| 20 | §3.3 θ | Se mezcla (a) el c_i postflop con "sigue chica/grande" según x y (b) el ancho del rango preflop (VPIP/PFR). El c preflop por umbral de fuerza no se mezcla (las estadísticas son postflop). | El .tex dice "c_i y ancho del rango preflop". |
+| 21 | interruptores | `explotacion.activa / usar_stats / filtros_tipo / contra_bots / chen_base` para medir cada pieza por separado. | Evaluación con y sin explotación. |
+
 ## Rendimiento
 
-El orden por fuerza de §1.9 (nº 5) subió el tiempo por decisión: mediana ~30 ms y p95 ~175 ms (antes 15 ms y 44 ms), con 6 corridas en paralelo.
+El orden por fuerza de §1.9 (nº 5) subió el tiempo por decisión (mediana ~30 ms y p95 ~175 ms con 6 corridas en paralelo). Se recortó compartiendo por board los repartos de cartas entre todos los combos (mismo estimador, condicionando a que no choquen con las cartas del combo): flop 36 → 24 ms en un caso de rango estrecho; con la máquina quieta, mediana 13 ms y p95 46 ms por decisión (flop 35/58 ms, turn 29/49 ms, river 11/17 ms).
