@@ -189,21 +189,26 @@ def correr_mesa(indice, rivales, orden, rondas, puerto, dir_run, ruta_params, me
     token_bender = f"bender-{indice}"
     env = dict(os.environ, BENDER_TOKEN=token_bender)
     log = os.path.join(dir_run, "bender.jsonl")
-    for quien in orden:                                   # el orden de conexión fija el asiento
-        if quien == "bender":
-            lanzar([sys.executable, BENDER_MAIN, "-addr", f"127.0.0.1:{puerto}", "-silencioso", "-log", log, "-params", ruta_params],
-                   "bender", env)
-        else:
-            lanzar(comando_rival(quien, puerto, f"k-{quien}"), quien)
-        time.sleep(0.4)
     try:
-        mesa.wait(timeout=900)
-    except subprocess.TimeoutExpired:
-        pass
+        for quien in orden:                               # el orden de conexión fija el asiento
+            if quien == "bender":
+                lanzar([sys.executable, BENDER_MAIN, "-addr", f"127.0.0.1:{puerto}", "-silencioso", "-log", log, "-params", ruta_params],
+                       "bender", env)
+            else:
+                lanzar(comando_rival(quien, puerto, f"k-{quien}"), quien)
+            time.sleep(0.4)
+        try:
+            mesa.wait(timeout=900)
+        except subprocess.TimeoutExpired:
+            pass
+    finally:                                              # aunque algo falle, no dejar procesos huérfanos
+        for p in procesos:
+            if p.poll() is None:
+                if os.name == "nt":                       # el python del venv lanza un hijo: matar el árbol
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], capture_output=True)
+                else:
+                    p.kill()
     duracion = time.time() - inicio
-    for p in procesos:
-        if p.poll() is None:
-            p.kill()
     for a in archivos:
         a.close()
     texto = open(ruta_mesa, encoding="utf-8", errors="replace").read()
