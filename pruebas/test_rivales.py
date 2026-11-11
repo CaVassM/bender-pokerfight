@@ -236,6 +236,44 @@ def test_sin_persistir_no_escribe(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
+def poblar(r, manos, vpip_k, pfr_k, pasa=0, pagos=0, retiros=0, apuestas=0, subidas=0):
+    for i in range(manos):
+        r.obs_stat("vpip", i < vpip_k)
+        r.obs_stat("pfr", i < pfr_k)
+    post = r.contadores["post"]
+    post["pasa"], post["pagos"], post["retiros_ante_apuesta"] = pasa, pagos, retiros
+    post["apuestas"], post["subidas"] = apuestas, subidas
+
+
+def test_conservador_se_reconoce_por_comportamiento():
+    r = Rival("c", P)
+    assert r.prob_conductual() == P["conductual"]["conservador"]["prior"]           # sin datos: el prior
+    assert r.bot_reconocido() is None
+    poblar(r, manos=20, vpip_k=17, pfr_k=0, pasa=20, pagos=12, retiros=10)           # VPIP 0,85, nunca sube ni apuesta
+    assert r.prob_conductual() >= 0.9
+    assert r.bot_reconocido() == ("conservador", pytest.approx(r.prob_conductual()))
+
+
+def test_apostar_con_frecuencia_descarta_al_conservador():
+    r = Rival("c", P)
+    poblar(r, manos=40, vpip_k=33, pfr_k=0, pasa=40, pagos=30, retiros=20, apuestas=8, subidas=2)   # 10 % agresivo
+    assert r.prob_conductual() < 0.5                      # "nunca apuesta" ya no se cumple
+    solo_una = Rival("u", P)                              # 1 de 100 (1 %) sigue más cerca de 0,5 % que de 20 %
+    poblar(solo_una, manos=40, vpip_k=33, pfr_k=0, pasa=40, pagos=30, retiros=20, apuestas=1)
+    assert solo_una.prob_conductual() > 0.5
+
+
+def test_un_tag_o_un_bot_agresivo_no_se_confunde_con_el_conservador():
+    tag = Rival("t", P)
+    poblar(tag, manos=60, vpip_k=18, pfr_k=5, pasa=60, pagos=25, retiros=40, apuestas=30, subidas=8)
+    assert tag.prob_conductual() < 0.01
+    # VPIP alto pero agresivo (como aleatorio): tampoco
+    ale = Rival("a", P)
+    poblar(ale, manos=60, vpip_k=40, pfr_k=33, pasa=10, pagos=8, retiros=10, apuestas=15, subidas=10)
+    assert ale.prob_conductual() < 0.01
+    assert ale.bot_reconocido() is None
+
+
 def test_el_parametro_persistir_manda_cuando_no_se_pasa_explicito(tmp_path):
     p = cargar_params()
     p["rivales"].update({"dir": str(tmp_path), "persistir": False})

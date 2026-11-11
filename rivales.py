@@ -146,12 +146,36 @@ class Rival:
         """Posterior de que sea cada bot del kit o 'propio' (§2.7)."""
         return _normalizar(self.log_huella)
 
+    def prob_conductual(self, nombre="conservador"):
+        """Posterior de que el rival sea `nombre` mirando SOLO su comportamiento (para bots sin huella de montos).
+        log-odds = prior + evidencia de (a) agresión postflop, (b) VPIP y (c) PFR; cada una es un cociente de
+        verosimilitudes binomial entre H1 (es ese bot) y H0 (otro). Con pocas oportunidades devuelve el prior."""
+        c = self.p["conductual"][nombre]
+        post = self.contadores["post"]
+        agresivas = post["apuestas"] + post["subidas"]
+        oportunidades = agresivas + post["pagos"] + post["pasa"] + post["retiros_ante_apuesta"]
+        if oportunidades < c["min_oportunidades"]:
+            return c["prior"]
+        lo = math.log(c["prior"] / (1.0 - c["prior"]))
+        e, p0 = c["eps_agresion"], c["p_agresion_otros"]
+        lo += agresivas * math.log(e / p0) + (oportunidades - agresivas) * math.log((1 - e) / (1 - p0))
+        for estad, si, no in (("vpip", c["vpip_si"], c["vpip_no"]), ("pfr", c["pfr_si"], c["pfr_no"])):
+            k, n = self.stats[estad].k, self.stats[estad].n
+            lo += k * math.log(si / no) + (n - k) * math.log((1 - si) / (1 - no))
+        return 1.0 / (1.0 + math.exp(-max(-50.0, min(50.0, lo))))
+
     def bot_reconocido(self):
-        """(bot, probabilidad) si algún bot del kit supera el umbral de huella (0,9); si no, None."""
+        """(bot, probabilidad) si algún bot del kit supera el umbral (0,9): por huella de montos (§2.7) o, para los
+        que nunca apuestan (conservador), por comportamiento; si no, None."""
+        umbral = self.p["huella"]["umbral"]
         post = self.huella()
         bot = max(post, key=post.get)
-        if bot != "propio" and post[bot] >= self.p["huella"]["umbral"]:
+        if bot != "propio" and post[bot] >= umbral:
             return bot, post[bot]
+        for nombre in self.p["conductual"]:
+            pc = self.prob_conductual(nombre)
+            if pc >= umbral:
+                return nombre, pc
         return None
 
     def estadistica(self, nombre):
