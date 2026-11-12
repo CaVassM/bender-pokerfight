@@ -77,8 +77,9 @@ def armar(semilla, campo, ruta_params_bender, dir_t):
         elif tipo == "bender_v1":
             ruta_rival = os.path.join(dir_t, f"params-{alias}.json")
             with open(ruta_rival, "w", encoding="utf-8") as f:
-                json.dump({"riesgo": {"utilidad": False}, "rivales": {"dir": os.path.join(dir_t, f"rivales-{alias}")},
-                           "registro": {"mensajes": False}}, f)
+                # Fijado a «v1.2-fix con la utilidad apagada»: las reglas nuevas (limpers) también apagadas aunque cambien los valores por defecto.
+                json.dump({"riesgo": {"utilidad": False}, "apertura": {"limpers_menu": False},
+                           "rivales": {"dir": os.path.join(dir_t, f"rivales-{alias}")}, "registro": {"mensajes": False}}, f)
             main_v1 = os.path.join(BENDER_V1_DIR, "main.py") if BENDER_V1_DIR else E.BENDER_MAIN
             cmd = [sys.executable, main_v1, "-silencioso", "-params", ruta_rival, "-log", os.path.join(dir_t, f"{alias}.jsonl")]
         else:
