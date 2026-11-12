@@ -75,9 +75,10 @@ def test_en_profundo_no_se_ofrece_el_all_in_sobre_limpers_y_en_intermedio_si():
     assert any(f["tipo"] == "allin" for f in info["tabla_ev"])
 
 
-def test_con_el_interruptor_apagado_sigue_la_tabla_de_apertura_de_siempre():
+def test_por_defecto_la_regla_de_limpers_esta_encendida_y_apagada_es_la_tabla_de_siempre():
+    assert params()["apertura"]["limpers_menu"] is True                        # v1.3-limpers
     p = params(n_min=500, eps_obj=0.02)
-    assert p["apertura"]["limpers_menu"] is False
+    p["apertura"]["limpers_menu"] = False
     accion, _, info = decidir(spot_btn("As Kd"), p)
     assert info["decision"] == "apertura" and accion == {"tipo": "raise", "monto": 250} and "limpers" not in info
     accion, _, info = decidir(spot_btn("7h 2c"), p)

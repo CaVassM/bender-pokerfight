@@ -31,9 +31,11 @@ PARAMS = {
     "apertura": {
         "tamano_bb": 2.5,
         # --- §1.5 "Preflop con limpers" (jugadores que solo igualaron la ciega, sin subida) ---
+        # True  = (v1.3-limpers, por defecto) con limpers se decide con el menú de EV/utilidad de la Capa 1: retirarse / igualar
+        #         (over-limp) / iso-raise / all-in. Medido en 300 campeonatos de entrenamiento emparejados: P(top 6) +2,3 pts
+        #         (IC −4,3 a +9,0), empate con tendencia a favor.
         # False = como en v1.2-fix: con limpers se usa la tabla de apertura de siempre (sin ver a los limpers, sin over-limp).
-        # True  = se decide con el menú de EV/utilidad de la Capa 1: retirarse / igualar (over-limp) / iso-raise / all-in.
-        "limpers_menu": False,
+        "limpers_menu": True,
         "iso_por_limper": 1.0,        # iso-raise = apertura + iso_por_limper bb por cada limper
         # El iso-raise se descarta si e' < iso_margen / (n_pagadores + 1): su equity debe superar su parte justa del bote con
         # ese margen (reemplaza a la regla multiway de §1.11, hecha para faroles: 0,5 no tiene sentido con 4 en el bote).
