@@ -82,9 +82,10 @@ class Bender:
             # Reconexión a mitad de mano (o mano_inicio perdido): sin cartas no
             # se puede decidir nada con criterio.
             accion, motivo = accion_segura(validas), "sin cartas de esta mano: acción segura"
-            turno = Turno(estado, self.mi_id, [], validas, mensaje.get("timeout_ms", 0))
+            turno = Turno(estado, self.mi_id, [], validas, mensaje.get("timeout_ms", 0), stacks0=self.mesa.stacks0_de(estado))
         else:
-            turno = Turno(estado, self.mi_id, self.mesa.mano, validas, mensaje.get("timeout_ms", 0))
+            turno = Turno(estado, self.mi_id, self.mesa.mano, validas, mensaje.get("timeout_ms", 0),
+                         stacks0=self.mesa.stacks0_de(estado))
             try:
                 accion, motivo, info = self._estrategia(turno)
             except Exception:

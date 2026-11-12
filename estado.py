@@ -140,9 +140,12 @@ def accion_es_valida(accion, validas):
 class Turno:
     """Todo lo que Bender sabe en el momento de decidir, ya masticado."""
 
-    def __init__(self, estado, mi_id, mano, validas, timeout_ms=0):
+    def __init__(self, estado, mi_id, mano, validas, timeout_ms=0, stacks0=None):
         self.estado = estado
         self.mi_id = mi_id
+        # S⁰ (§1.4): fichas de cada jugador AL EMPEZAR LA MANO {id: saldo + lo que ya puso}. Si no se conocen (reconexión a
+        # mitad de mano, pruebas sueltas) se estiman con el estado actual: saldo + apuesta_ronda.
+        self.stacks0 = dict(stacks0) if stacks0 else None
         self.mano = list(mano or [])
         self.validas = list(validas or [])
         self.timeout_ms = timeout_ms
@@ -197,11 +200,23 @@ class Turno:
         return self.estado.apuesta_actual + self.estado.subida_minima
 
     def stack_efectivo_bb(self):
-        """S_ef (§1.4): min(S_Bender, max_i S_i) en ciegas grandes."""
-        rivales = self.rivales
-        if not rivales:
-            return self.yo.saldo / self.bb
-        return min(self.yo.saldo, max(j.saldo for j in rivales)) / self.bb
+        """S_ef (§1.4): min(S⁰_Bender, max_i S⁰_i) / bb, con S⁰ = fichas AL EMPEZAR LA MANO (saldo + lo ya puesto).
+
+        Con S⁰ el modo es el mismo durante toda la mano. (Con las fichas que QUEDAN detrás, un rival all-in valía 0 bb y
+        Bender entraba en push/fold ante cualquier all-in: llegó a retirar AA contra un all-in de 100 bb.)"""
+        yo0 = self._s0(self.yo)
+        if self.stacks0:
+            rivales0 = [v for k, v in self.stacks0.items() if k != self.mi_id]       # a quienes se repartieron cartas
+        else:
+            rivales0 = [self._s0(j) for j in self.rivales]
+        if not rivales0:
+            return yo0 / self.bb
+        return min(yo0, max(rivales0)) / self.bb
+
+    def _s0(self, jugador):
+        if self.stacks0 and jugador.id in self.stacks0:
+            return self.stacks0[jugador.id]
+        return jugador.saldo + jugador.apuesta_ronda
 
     def fraccion_de_monto(self, monto):
         """x (§1.8) o z (§2.7): (monto - apuesta actual) / (P + C)."""
@@ -281,6 +296,8 @@ class SeguimientoMesa:
         self.mano = []            # nuestras cartas de la mano en curso
         self.id_mano_cartas = ""  # de qué mano son (tras reconectar a mitad de mano no hay)
         self.ultimo_estado = None
+        self.stacks0 = {}         # S⁰ de la mano en curso: {id: saldo + apuesta_ronda en mano_inicio} (§1.4)
+        self.id_mano_stacks = ""
 
     def nueva_mano(self, estado, cartas):
         ids = frozenset(j.id for j in estado.jugadores)
@@ -294,6 +311,13 @@ class SeguimientoMesa:
         self.mano = list(cartas)
         self.id_mano_cartas = estado.id_mano
         self.ultimo_estado = estado
+        # Fichas al empezar la mano de cada jugador al que se le repartieron cartas (con las ciegas ya puestas o no: la suma es la misma).
+        self.stacks0 = {j.id: j.saldo + j.apuesta_ronda for j in estado.jugadores if j.en_mano}
+        self.id_mano_stacks = estado.id_mano
+
+    def stacks0_de(self, estado):
+        """S⁰ de esta mano, o None si no se vio el inicio de la mano (reconexión a mitad de mano)."""
+        return self.stacks0 if self.stacks0 and self.id_mano_stacks == estado.id_mano else None
 
     def mano_terminada(self):
         self.manos_mesa += 1

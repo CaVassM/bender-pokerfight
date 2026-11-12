@@ -305,7 +305,7 @@ class Capa1:
                     f *= (1.0 - v)
                 # e' depende del tamaño: quien paga una apuesta grande es solo la parte fuerte de su rango.
                 e_prima = self._e_prima(mesa, mano, board, rangos, responden, cs, c["nombre"], t_max / (1 + len(apuestas)),
-                                        ep_cache, info)
+                                        ep_cache, info, fijos=[r for r in rivales if r not in responden])
                 c["e_prima"] = e_prima
                 c["ev"] = ev_apuesta(f, P, e_prima, A_ef, A_p)
                 c["x"], c["A"], c["A_prima"], c["f"], c["c"] = round(x, 3), A_ef, A_p, round(f, 4), {k: round(v, 3) for k, v in cs.items()}
@@ -337,16 +337,20 @@ class Capa1:
             c["descartada"] = None
             if c["clase"] == "apuesta":
                 ep = c["e_prima"]
-                if len(rivales) >= d["multiway_rivales"] and ep < d["umbral_valor"]:
-                    c["descartada"] = f"multiway: {len(rivales)} rivales y e'={ep:.2f}<{d['umbral_valor']}"
+                if len(responden) >= d["multiway_rivales"] and ep < d["umbral_valor"]:      # solo cuentan los que pueden responder
+                    c["descartada"] = f"multiway: {len(responden)} respondedores y e'={ep:.2f}<{d['umbral_valor']}"
                 if ep < d["umbral_valor"]:
                     # Variantes opcionales (apagadas por defecto: no son del .tex; ver params.py)
                     if d["allin_profundo_solo_valor"] and modo == "profundo" and c["accion"]["tipo"] == "allin":
                         c["descartada"] = f"variante: all-in en modo profundo solo con valor (e'={ep:.2f})"
                     if d["solo_valor_sobre_apuesta"] and C_ > 0:
                         c["descartada"] = f"variante: subir sobre una apuesta solo con valor (e'={ep:.2f})"
-            if modo != "profundo" and c["clase"] in ("call", "apuesta") and c["accion"]["tipo"] != "allin":
+            # §1.11: la regla de compromiso es SOLO del modo intermedio (nunca en push/fold ni en profundo). Y igualar un all-in
+            # ajeno que pone todas las fichas de Bender es la opción "all-in" (queda all-in o retirarse): no se descarta.
+            if modo == "intermedio" and c["clase"] in ("call", "apuesta") and c["accion"]["tipo"] != "allin":
                 coste = C_ if c["clase"] == "call" else c["A"]
+                if c["clase"] == "call" and coste >= yo.saldo:
+                    continue
                 if coste > turno.techo * d["compromiso_fraccion"]:
                     c["descartada"] = f"compromiso: cuesta {coste} > {d['compromiso_fraccion']:.2f} del stack ({turno.techo})"
 
@@ -414,7 +418,7 @@ class Capa1:
         lec = self._lect.get(rival.id)
         return EXP.c_mezclada(c, lec, x, p) if lec is not None else c           # §3.3: θ = (1−ρ)·θ_base + ρ·θ̂
 
-    def _e_prima(self, mesa, mano, board, rangos, responden, cs, nombre, t_max, cache, info):
+    def _e_prima(self, mesa, mano, board, rangos, responden, cs, nombre, t_max, cache, info, fijos=()):
         """e' = equity si le pagan ESTA apuesta (§1.9), contra el rango de pago de quienes pagarían.
 
         Depende del tamaño: ante una apuesta grande solo paga la parte fuerte del rango (c bajo),
@@ -424,11 +428,14 @@ class Capa1:
         postflop también: la fracción c_i más fuerte de su rango, ordenada por la fuerza de cada
         combo en ese board (equity contra una mano al azar, §1.9). Se memoriza por (pagadores, c_i)
         para no repetir la simulación cuando dos tamaños dan el mismo rango de pago.
+
+        `fijos`: rivales que siguen en el bote pero NO pueden responder (all-in): no se retiran ni pagan más, así que su
+        rango entra entero en la equity (la mano se decide también contra ellos). No cuentan en n_pago ni en f.
         """
         p = self.p
         n_pago = max(1, min(len(responden), int(round(sum(cs.values())))))
         pagan = sorted(responden, key=lambda r: -cs[r.id])[:n_pago]
-        clave = (tuple(r.id for r in pagan), tuple(round(cs[r.id], 2) for r in pagan))
+        clave = (tuple(r.id for r in pagan), tuple(round(cs[r.id], 2) for r in pagan), tuple(r.id for r in fijos))
         if clave in cache:
             return cache[clave]
         rangos_pago = []
@@ -439,10 +446,11 @@ class Capa1:
             else:
                 rp = POB.top_fraccion(base, cs[r.id])
             rangos_pago.append(rp)
+        rangos_pago += [rangos[r.id] for r in fijos]
         umbrales = [p["decision"]["umbral_semifarol"], p["decision"]["umbral_valor"]]
         res = self._equity(mano, board, rangos_pago, umbrales, mesa, t_max)
         resumen = self._resumen_equity(res)
-        resumen.update({"para": nombre, "pagan": [r.id for r in pagan]})
+        resumen.update({"para": nombre, "pagan": [r.id for r in pagan], "allin_en_el_bote": [r.id for r in fijos]})
         info["equities_si_pagan"].append(resumen)
         info.setdefault("equity_si_pagan", resumen)           # la primera, por compatibilidad
         cache[clave] = res.e

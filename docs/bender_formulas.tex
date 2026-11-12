@@ -177,7 +177,7 @@ $w(h)$ & Peso del combo vivo $h$ en el rango (§2.1). \\
 \subsection{Stack efectivo y modo de juego}
 \begin{formbox}{Stack efectivo en ciegas grandes}
 \[
-S_{\text{ef}}=\frac{\min\!\big(S_{\text{Bender}},\ \max_i S_i\big)}{\mathrm{bb}}
+S_{\text{ef}}=\frac{\min\!\big(S^{0}_{\text{Bender}},\ \max_i S^{0}_i\big)}{\mathrm{bb}}
 \qquad
 \text{modo}=\begin{cases}
 \text{push/fold} & S_{\text{ef}}\le 15\\
@@ -186,10 +186,10 @@ S_{\text{ef}}=\frac{\min\!\big(S_{\text{Bender}},\ \max_i S_i\big)}{\mathrm{bb}}
 \end{cases}
 \]
 \begin{params}
-$S_{\text{Bender}}$ & Fichas de Bender detrás (\code{saldo}). \\
-$S_i$ & Fichas del rival $i$ que sigue en la mano. \\
+$S^{0}_{\text{Bender}}$ & Fichas de Bender \emph{al empezar la mano}: su \code{saldo} al repartir más lo que ya puso en ciegas (\code{saldo} $+$ \code{apuesta\_ronda} en \code{mano\_inicio}). \\
+$S^{0}_i$ & Lo mismo para cada rival al que se le repartieron cartas en esa mano (aunque luego se retire o vaya all-in). \\
 \end{params}
-\uso{Se recalcula en cada decisión. Con ciegas fijas y 10\,000 fichas iniciales (100 bb), lo normal es el modo profundo; push/fold queda de respaldo.}
+\uso{Se calcula UNA vez por mano, con las fichas del inicio, y el modo queda fijo durante toda la mano. Nunca se usan las fichas que quedan detrás en medio de la mano: un rival all-in tiene \code{saldo} $=0$ y eso no lo hace un rival de 0\,bb (la definición anterior, ambigua, mandaba a push/fold ante cualquier all-in de un rival y llegó a retirar AA contra un all-in de 100\,bb). Con ciegas fijas y 10\,000 fichas iniciales (100 bb), lo normal es el modo profundo; push/fold queda de respaldo para stacks realmente cortos.}
 \end{formbox}
 
 \subsection{Apertura preflop (nadie subió)}
@@ -323,8 +323,8 @@ a^{*}=\arg\max_{a\ \text{no descartada}} EV(a)
 \text{tipo de apuesta}=\begin{cases}\text{valor} & e'\ge 0{,}50\\ \text{semi-farol} & 0{,}25\le e'<0{,}50\\ \text{farol} & e'<0{,}25\end{cases}
 \]
 \begin{params}
-Multiway & Con 3 o más rivales en la mano y $e'<0{,}50$, se descartan las apuestas (sin valor no se farolea contra varios). \\
-Compromiso & En modo intermedio, si igualar o subir cuesta más de $\tfrac13$ del stack total, se descarta: queda all-in o retirarse. \\
+Multiway & Con 3 o más rivales que \emph{pueden responder} a la apuesta (con fichas detrás, no all-in) y $e'<0{,}50$, se descartan las apuestas (sin valor no se farolea contra varios). Los rivales all-in siguen en el bote para la equity, pero no cuentan como respondedores. \\
+Compromiso & SOLO en modo intermedio: si igualar o subir cuesta más de $\tfrac13$ del stack, se descarta: queda all-in o retirarse. Igualar un all-in ajeno, cuando eso pone todas las fichas de Bender, cuenta como la opción \emph{all-in} y no se descarta. En push/fold y en profundo la regla no se aplica nunca. \\
 All-in profundo & En modo profundo, el all-in se descarta si $e'<0{,}50$ (parámetro \code{allin\_profundo\_solo\_valor}). \\
 Subir sobre apuesta & Subir sobre una apuesta de otro solo con $e'\ge0{,}50$: sin semi-faroles ni faroles de re-subida (parámetro \code{solo\_valor\_sobre\_apuesta}). Medido en el paso 3: $+16{,}9\pm13{,}3$ bb/100 contra \code{base}. Se vuelve a evaluar con la Capa 2. \\
 Mezcla & Si la segunda mejor acción cumple $EV_1-EV_2<0{,}02\cdot\max(P,\mathrm{bb})$, $EV_2\ge0$ y ninguna de las dos es retirarse, se elige la segunda con probabilidad $0{,}35$. Así Bender no es predecible. \\

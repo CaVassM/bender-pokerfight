@@ -12,7 +12,7 @@ Un bot sano tiene que ganarles con claridad. Mismo protocolo que bots/novato (co
 import argparse
 import sys
 
-from conexion import Conexion, MesaRechazo, log
+from conexion_estres import Conexion, MesaRechazo, log
 
 
 def accion(modo, mensaje, conexion):
