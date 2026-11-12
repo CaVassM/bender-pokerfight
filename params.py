@@ -56,8 +56,9 @@ PARAMS = {
                # §1.13 Utilidad con colchón: u(S) = ln(S + K), S = fichas detrás de Bender tras la mano. Con `utilidad` True
                # se elige la acción de mayor UTILIDAD ESPERADA (mismo árbol que el EV); False = el EV en fichas de siempre.
                # K es el "colchón": con K → ∞ la utilidad se vuelve lineal y se recupera el EV; K chico = más aversión
-               # a quedar sin fichas. Valor inicial 10 000 (un stack inicial); se elige con la métrica del campeonato.
-               "utilidad": False, "K": 10_000},
+               # a quedar sin fichas. K = 10 000 (un stack inicial). ACTIVADA POR DEFECTO desde v1.1-riesgo (2026-11-12): elegida
+               # con la métrica del campeonato (P(top 6) 49 % → 57-70 %); `utilidad` False = el comportamiento de v1-probabilistico.
+               "utilidad": True, "K": 10_000},
     # --- §2.1 Rango ---------------------------------------------------------------
     "rango": {"piso": 0.02},
     # --- §2.2 Plantillas (ret, paga, sube) por categoría --------------------------

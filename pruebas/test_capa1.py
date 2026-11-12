@@ -269,6 +269,7 @@ def test_mezcla_elige_la_segunda_solo_si_estan_muy_cerca():
     # Con un sorteo de mezcla de 0,99 (> 0,35) nunca se mezcla; con 0,0 se mezcla si y solo si
     # la 2.ª mejor está a menos de 0,02·max(P, bb) de la 1.ª, tiene EV >= 0 y ninguna es retirarse.
     p = params()
+    p["riesgo"]["utilidad"] = False                 # esta prueba mide la cercanía en EV (con utilidad la mezcla compara en ce)
     turno = spot("Ah Qd", "Kd 9c 4s", rivales=((9000, 0),), yo=(9000, 0), pozo=600)
     hubo_mezcla = 0
     for semilla in range(12):                                            # varios spots con pozos distintos
@@ -348,7 +349,7 @@ def test_utilidad_la_tabla_trae_u_y_ce_y_retirarse_es_la_referencia():
     p = params()
     p["riesgo"]["K"] = 10_000
     _, _, info = decidir(turno, p)
-    assert info["utilidad"] == {"activa": False, "K": 10_000, "S": 9000}
+    assert info["utilidad"] == {"activa": True, "K": 10_000, "S": 9000}      # v1.1-riesgo: activada por defecto
     for fila in info["tabla_ev"]:
         assert "u" in fila and "ce" in fila and "ev" in fila
     assert all(f["ce"] == 0.0 and f["u"] == pytest.approx(math.log(19_000), abs=1e-5) for f in info["tabla_ev"] if f["tipo"] == "fold")
@@ -376,6 +377,7 @@ def test_utilidad_apagada_no_cambia_las_decisiones_y_con_K_enorme_tampoco():
     p_off["riesgo"].update({"utilidad": False, "K": 500})
     p_on["riesgo"].update({"utilidad": True, "K": 1e9})
     p_ref = params(n_min=300, eps_obj=0.02)
+    p_ref["riesgo"]["utilidad"] = False                        # referencia = el comportamiento de v1-probabilistico
     iguales = 0
     for t in _spots_de_prueba():
         if not t.validas or not t.rivales:
@@ -388,8 +390,16 @@ def test_utilidad_apagada_no_cambia_las_decisiones_y_con_K_enorme_tampoco():
     assert iguales >= 35                                       # con K enorme casi siempre igual (empates numéricos aparte)
 
 
+def test_valores_por_defecto_de_v1_1_riesgo():
+    """Aprobado por el usuario (2026-11-12): utilidad ON, K = 10 000, calibración de los all-in OFF."""
+    p = params()
+    assert p["riesgo"]["utilidad"] is True and p["riesgo"]["K"] == 10_000
+    assert p["calibracion_allin"]["activa"] is False
+
+
 def test_utilidad_con_K_chico_hace_menos_all_in_y_nunca_acciones_invalidas():
     p_off, p_on = params(n_min=300, eps_obj=0.02), params(n_min=300, eps_obj=0.02)
+    p_off["riesgo"]["utilidad"] = False
     p_on["riesgo"].update({"utilidad": True, "K": 2000})
     n_off = n_on = 0
     for t in _spots_de_prueba(60, semilla=5):

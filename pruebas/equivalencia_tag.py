@@ -4,9 +4,10 @@
 Genera N spots al azar (semilla fija; preflop y postflop, 1-4 rivales, con y sin apuesta enfrentada, stacks cortos y
 profundos), decide cada uno con Capa1 de DOS carpetas de bender (el worktree del tag y la actual) con las mismas
 semillas, y compara la acción y el EV de cada opción. Los interruptores nuevos (riesgo.utilidad, calibracion_allin.activa)
-vienen apagados por defecto, así que tienen que dar lo mismo.
+estaban apagados por defecto hasta v1.1-riesgo (la utilidad ahora viene ENCENDIDA): para comparar con v1-probabilistico hay que
+pasar --params pruebas/variantes/riesgo/v1.json (utilidad apagada), y entonces tiene que dar lo mismo.
 
-  bender/.venv/Scripts/python.exe bender/pruebas/equivalencia_tag.py --tag-dir <worktree del tag>/bender --n 300
+  bender/.venv/Scripts/python.exe bender/pruebas/equivalencia_tag.py --tag-dir <worktree del tag>/bender --n 300 --params <v1.json>
 """
 
 import argparse
