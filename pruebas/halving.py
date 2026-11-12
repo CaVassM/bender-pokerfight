@@ -219,12 +219,15 @@ def main():
     ap.add_argument("--nombre", default="h1")
     ap.add_argument("--paralelo", type=int, default=10)
     ap.add_argument("--solo-informe", action="store_true", help="no juega: arma el informe con lo ya guardado")
+    ap.add_argument("--humo", action="store_true", help="prueba de punta a punta en miniatura (6 configuraciones, 1-2-3-4 campeonatos, validación de 2)")
     args = ap.parse_args()
+    if args.humo:
+        globals().update(ACUMULADOS=[1, 2, 3, 4], PASAN=[4, 3, 2], N_VALID=2)
     directorio = os.path.join(E.SALIDAS, "halving", args.nombre)
     os.makedirs(directorio, exist_ok=True)
     cor = Corredor(directorio, args.paralelo)
     base = {"id": "base", "x": None, "flags": None, "variante": {}}
-    configs = muestrear()
+    configs = muestrear()[::8] if args.humo else muestrear()       # humo: 6 configuraciones repartidas entre los 4 casos
     json.dump({"commit": os.environ.get("BENDER_COMMIT_COMPLETO"), "campo": CAMPO, "acumulados": ACUMULADOS, "pasan": PASAN,
               "configuraciones": configs}, open(os.path.join(directorio, "configuraciones.json"), "w"), indent=1)
     sem = [SEMILLA_RONDAS + i for i in range(ACUMULADOS[-1])]
