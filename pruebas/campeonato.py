@@ -36,6 +36,10 @@ import evaluar as E  # noqa: E402
 RAIZ, BIN, EXE, SALIDAS = E.RAIZ, E.BIN, E.EXE, E.SALIDAS
 STACK = 10_000
 BB = 100
+# Rival "bender_v1": copias de Bender como equipos fuertes DESCONOCIDOS (no son bots del kit). Por defecto es el código que se
+# evalúa con la utilidad apagada (riesgo neutral); con --bender-v1-dir corre el main.py de otra carpeta (p. ej. el worktree del tag
+# v1-probabilistico). Cada copia lleva su propia carpeta de memoria y su propio log.
+BENDER_V1_DIR = None
 
 
 def wilson(k, n, z=1.96):
@@ -70,6 +74,13 @@ def armar(semilla, campo, ruta_params_bender, dir_t):
                 break
         if tipo == "bender":
             cmd = [sys.executable, E.BENDER_MAIN, "-silencioso", "-params", ruta_params_bender, "-log", os.path.join(dir_t, "bender.jsonl")]
+        elif tipo == "bender_v1":
+            ruta_rival = os.path.join(dir_t, f"params-{alias}.json")
+            with open(ruta_rival, "w", encoding="utf-8") as f:
+                json.dump({"riesgo": {"utilidad": False}, "rivales": {"dir": os.path.join(dir_t, f"rivales-{alias}")},
+                           "registro": {"mensajes": False}}, f)
+            main_v1 = os.path.join(BENDER_V1_DIR, "main.py") if BENDER_V1_DIR else E.BENDER_MAIN
+            cmd = [sys.executable, main_v1, "-silencioso", "-params", ruta_rival, "-log", os.path.join(dir_t, f"{alias}.jsonl")]
         else:
             cmd = E.comando_rival_arena(tipo)
         partes.append({"id": alias, "tipo": tipo, "comando": cmd, "directorio": RAIZ})
@@ -226,9 +237,11 @@ def main():
     ap.add_argument("--manos", type=int, default=50)
     ap.add_argument("--paralelo", type=int, default=4)
     ap.add_argument("--comparar", default=None)
+    ap.add_argument("--bender-v1-dir", default=None, help="carpeta bender/ cuyo main.py usan las copias `bender_v1` (por defecto, el código evaluado con utilidad apagada)")
     ap.add_argument("--solo-agregar", action="store_true", help="no juega: solo lee los campeonatos ya guardados")
     args = ap.parse_args()
 
+    globals()["BENDER_V1_DIR"] = os.path.abspath(args.bender_v1_dir) if args.bender_v1_dir else None
     campo = campo_de(args.campo)
     reserva = [n for n, _ in campo if n in E.RESERVA]
     if reserva and not args.final:
