@@ -43,6 +43,9 @@ BENDER_MAIN = os.path.join(RAIZ, "bender", "main.py")
 SALIDAS = os.environ.get("BENDER_SALIDAS") or os.path.join(RAIZ, "bender", "pruebas", "salidas")
 ENTRENAMIENTO = ["aleatorio", "conservador", "base", "estadistico", "bandido", "espia"]
 RESERVA = ["darwin", "novato"]
+# Bots de PRUEBA DE ESTRÉS (pruebas/bots_estres/estres.py): juegan siempre lo mismo; no son rivales para calibrar.
+ESTRES = {"allin_siempre": "allin", "iguala_siempre": "iguala", "sube_min_siempre": "sube_min"}
+SCRIPT_ESTRES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bots_estres", "estres.py")
 BB = 100
 STACK_MESA = 10_000
 T95 = {1: 12.71, 2: 4.30, 3: 3.18, 4: 2.78, 5: 2.57, 6: 2.45, 7: 2.36, 8: 2.31, 9: 2.26, 10: 2.23, 12: 2.18,
@@ -68,6 +71,8 @@ def resumen_ic(xs):
 
 
 def comando_rival(nombre, puerto, token):
+    if nombre in ESTRES:
+        return [sys.executable, SCRIPT_ESTRES, "-modo", ESTRES[nombre], "-addr", f"127.0.0.1:{puerto}", "-token", token]
     if nombre == "novato":                      # bot de Python: no tiene binario en bin/
         return [sys.executable, os.path.join(RAIZ, "bots", "novato", "bot.py"), "-addr", f"127.0.0.1:{puerto}",
                 "-token", token, "-silencioso"]
@@ -78,6 +83,8 @@ def comando_rival(nombre, puerto, token):
 
 def comando_rival_arena(nombre):
     """Como en torneo-go.json: la arena agrega -addr y -token."""
+    if nombre in ESTRES:
+        return [sys.executable, SCRIPT_ESTRES, "-modo", ESTRES[nombre]]
     if nombre == "novato":
         return [sys.executable, os.path.join(RAIZ, "bots", "novato", "bot.py"), "-silencioso"]
     extra = {"estadistico": ["-simulaciones", "2000"], "bandido": ["-silencioso"], "espia": ["-silencioso"],
@@ -192,12 +199,12 @@ def correr_mesa(indice, rivales, orden, rondas, puerto, dir_run, ruta_params, me
     env = dict(os.environ, BENDER_TOKEN=token_bender)
     log = os.path.join(dir_run, "bender.jsonl")
     try:
-        for quien in orden:                               # el orden de conexión fija el asiento
+        for asiento, quien in enumerate(orden):           # el orden de conexión fija el asiento
             if quien == "bender":
                 lanzar([sys.executable, BENDER_MAIN, "-addr", f"127.0.0.1:{puerto}", "-silencioso", "-log", log, "-params", ruta_params],
                        "bender", env)
             else:
-                lanzar(comando_rival(quien, puerto, f"k-{quien}"), quien)
+                lanzar(comando_rival(quien, puerto, f"k-{quien}-{asiento}"), f"{quien}-{asiento}")
             time.sleep(0.4)
         try:
             mesa.wait(timeout=900)
@@ -229,11 +236,11 @@ def correr_mesa(indice, rivales, orden, rondas, puerto, dir_run, ruta_params, me
             "rivales": rivales, "orden": orden, "final": fichas.get(token_bender)}
 
 
-def combinaciones_de_mesas(n_mesas, rivales, semilla):
+def combinaciones_de_mesas(n_mesas, rivales, semilla, fija=None):
     """Cada mesa lleva 4 de los rivales; se recorren las C(n,4) combinaciones en orden barajado,
     y el orden de conexión de los 5 se baraja (rota los asientos)."""
     rng = random.Random(semilla)
-    combos = list(itertools.combinations(rivales, 4))
+    combos = [tuple(fija)] if fija else list(itertools.combinations(rivales, 4))   # `fija`: 4 rivales (con copias) en todas las mesas
     rng.shuffle(combos)
     out = []
     for i in range(n_mesas):
@@ -296,6 +303,7 @@ def main():
     ap.add_argument("--params", default=None, help="JSON de parámetros de Bender (variante a evaluar)")
     ap.add_argument("--rivales", default=",".join(ENTRENAMIENTO))
     ap.add_argument("--final", action="store_true", help="permite los rivales de reserva (darwin, novato): SOLO evaluación final")
+    ap.add_argument("--mesa-fija", default=None, help="4 rivales (con copias) para TODAS las mesas, p. ej. allin_siempre,allin_siempre,allin_siempre,allin_siempre")
     ap.add_argument("--solo-hu", action="store_true")
     ap.add_argument("--solo-mesa", action="store_true")
     ap.add_argument("--semillas", type=int, default=3, help="semillas por rival en HU")
@@ -314,7 +322,10 @@ def main():
     reserva = [r for r in rivales if r in RESERVA]
     if reserva and not args.final:
         sys.exit(f"{reserva} son rivales de RESERVA: solo se usan en la evaluación final (--final), nunca para elegir parámetros.")
-    desconocidos = [r for r in rivales if r not in ENTRENAMIENTO + RESERVA]
+    fija = [r for r in args.mesa_fija.split(",") if r] if args.mesa_fija else None
+    if fija and len(fija) != 4:
+        sys.exit("--mesa-fija necesita exactamente 4 rivales")
+    desconocidos = [r for r in rivales + (fija or []) if r not in ENTRENAMIENTO + RESERVA + list(ESTRES)]
     if desconocidos:
         sys.exit(f"rivales desconocidos: {desconocidos}")
 
@@ -349,7 +360,7 @@ def main():
 
     # --- MESA ---
     if not args.solo_hu:
-        plan = combinaciones_de_mesas(args.mesas, rivales, args.semilla_base)
+        plan = combinaciones_de_mesas(args.mesas, rivales, args.semilla_base, fija)
         print(f"[mesa] {len(plan)} mesas de 5 ({args.rondas} manos), {args.paralelo} en paralelo...", flush=True)
         with ThreadPoolExecutor(args.paralelo) as pool:
             futuros = [pool.submit(correr_mesa, i, c, orden, args.rondas, args.puerto_base + i,
