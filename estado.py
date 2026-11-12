@@ -199,6 +199,16 @@ class Turno:
         """Total mínimo que la mesa acepta como bet o raise."""
         return self.estado.apuesta_actual + self.estado.subida_minima
 
+    def limpers(self):
+        """Rivales que SOLO igualaron la ciega preflop (call sin subida previa) y siguen en la mano (§1.5, preflop con limpers).
+        Vacío si ya hubo una subida, si no estamos preflop o si nadie entró."""
+        est = self.estado
+        if est.etapa != "preflop" or est.apuesta_actual > self.bb:
+            return []
+        ids = {h.get("id_jugador") for h in est.historial
+               if h.get("etapa") == "preflop" and (h.get("accion") or {}).get("tipo") == "call"}
+        return [j for j in self.rivales if j.id in ids]
+
     def stack_efectivo_bb(self):
         """S_ef (§1.4): min(S⁰_Bender, max_i S⁰_i) / bb, con S⁰ = fichas AL EMPEZAR LA MANO (saldo + lo ya puesto).
 

@@ -30,6 +30,22 @@ PARAMS = {
     # --- §1.5 Apertura preflop ----------------------------------------------------
     "apertura": {
         "tamano_bb": 2.5,
+        # --- §1.5 "Preflop con limpers" (jugadores que solo igualaron la ciega, sin subida) ---
+        # False = como en v1.2-fix: con limpers se usa la tabla de apertura de siempre (sin ver a los limpers, sin over-limp).
+        # True  = se decide con el menú de EV/utilidad de la Capa 1: retirarse / igualar (over-limp) / iso-raise / all-in.
+        "limpers_menu": False,
+        "iso_por_limper": 1.0,        # iso-raise = apertura + iso_por_limper bb por cada limper
+        # El iso-raise se descarta si e' < iso_margen / (n_pagadores + 1): su equity debe superar su parte justa del bote con
+        # ese margen (reemplaza a la regla multiway de §1.11, hecha para faroles: 0,5 no tiene sentido con 4 en el bote).
+        # 0 = sin piso (decide solo el EV).
+        "iso_margen": 1.25,
+        # En modo profundo NO se ofrece el all-in sobre limpers (100 bb contra un limp): el modelo de población le da mucha
+        # fold equity a un all-in de ~20x el bote. En intermedio sí.
+        "limpers_allin_profundo": False,
+        # Tamaño de apertura (y base del iso-raise) cuando el rival que actúa después de Bender y más paga es station con
+        # π_station >= vs_station_pi. Igual a tamano_bb = sin efecto (valor por defecto).
+        "apertura_vs_station": 2.5,
+        "vs_station_pi": 0.7,
         # top % de manos que abre cada posición (con 5 jugadores no hay UTG)
         "top_pos": {"UTG": 14.3, "HJ": 18.9, "CO": 25.5, "BTN": 43.3, "SB": 33.0, "BTN_SB_HU": 70.0},
     },

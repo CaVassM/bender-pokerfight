@@ -207,7 +207,33 @@ top \% & 14{,}3 & 18{,}9 & 25{,}5 & 43{,}3 & 33{,}0 & 70\\ \bottomrule
 rank$(h)$ & Posición de la clase de $h$ en el ranking de 169 clases (por equity contra una mano al azar), medida en \% acumulado de combos. \\
 top$_{\text{pos}}$ & Porcentaje de manos que abre desde esa posición. Con 5 jugadores no hay UTG. \\
 \end{params}
-\uso{Bender nunca entra pagando la ciega (sin limp): abre subiendo o se retira. Si ya hubo una subida, decide con el EV (§1.6–§1.9) usando el rango estimado del que subió.}
+\uso{Solo cuando NADIE entró todavía: Bender no entra pagando la ciega (sin limp), abre subiendo o se retira. Si ya hubo una subida, decide con el EV (§1.6–§1.9) usando el rango estimado del que subió. Si hubo limpers sin subida, rige la regla de abajo.}
+\end{formbox}
+
+\subsection{Preflop con limpers (nadie subió, pero alguien igualó la ciega)}
+\begin{formbox}{Iso-raise, over-limp o retirarse}
+\[
+n=\big|\{\,i:\ i\ \text{solo igualó la ciega preflop y sigue en la mano}\,\}\big|\ \ge 1
+\qquad\qquad
+T_{\text{iso}}=\big(T_{\text{ap}}+\iota\cdot n\big)\ \mathrm{bb}
+\]
+\[
+a^{*}=\arg\max_{a\in\{\text{retirarse},\ \text{igualar (over-limp)},\ \text{iso-raise a } T_{\text{iso}},\ \text{all-in}\}} U(a)
+\qquad\quad
+\text{iso-raise descartado si }\ e'<\frac{m_{\text{iso}}}{n_{\text{pago}}+1}
+\]
+\[
+EV(\text{iso})=f\,P+(1-f)\Big[e'\,\big(P+A+\textstyle\sum_{j\in\text{pagan}}A'_j\big)-A\Big]
+\]
+\begin{params}
+$n$ & Número de limpers: rivales cuya única acción preflop fue igualar, sin subida previa (si ya hubo una subida no hay limpers: se decide como en §1.9). \\
+$T_{\text{ap}}$ & Tamaño de apertura de §1.5 (2{,}5 bb), o $T_{\text{vs}}$ (\code{apertura\_vs\_station}) si el rival que habla \emph{después} de Bender y más paga es station con $\pi_{\text{station}}\ge 0{,}7$. \\
+$\iota$ & \code{iso\_por\_limper}: bb que se agregan al tamaño por cada limper (1{,}0). \\
+$m_{\text{iso}}$ & \code{iso\_margen} (1{,}25): el iso-raise debe tener una equity mayor que su parte justa del bote, $1/(n_{\text{pago}}+1)$, con ese margen. \\
+$n_{\text{pago}}$ & Pagadores esperados de la subida: $\mathrm{redondeo}(\sum_i c_i)$, como en §1.9. \\
+$A'_j$ & Lo que agrega cada pagador $j$ (no solo el mayor, como en el EV de apostar de §1.9): $e'$ ya es contra todos los pagadores, y el bote al que le pagan tiene las fichas de todos. \\
+\end{params}
+\uso{Rangos y $c$: la equity y $c_i$ salen del rango de cada rival igual que en §1.9; el limper tiene el rango de «solo pagó» de §2.8 (top del VPIP sin el top del PFR con peso 1, el top del PFR con peso 0{,}3); quien aún no actuó, mano al azar. La regla multiway de §1.11 \emph{no} se aplica al iso-raise (es una regla contra faroles) y la sustituye el piso $m_{\text{iso}}/(n_{\text{pago}}+1)$; tampoco la de «subir solo sobre una apuesta», porque se sube sobre limps, no sobre una apuesta. El all-in solo se ofrece en modo intermedio: en profundo, 100 bb contra un limp es un riesgo que el modelo de población subestima (le da una fold equity enorme a un all-in de $\sim$20 veces el bote) y no se ofrece (\code{limpers\_allin\_profundo}). Si Bender es la ciega grande y nadie subió, pasar es gratis: nunca se retira. Con el interruptor \code{apertura.limpers\_menu} apagado se usa la tabla de apertura como antes (sin ver a los limpers, sin over-limp).}
 \end{formbox}
 
 \subsection{Pot odds y EV de igualar}
@@ -600,6 +626,9 @@ $\tau$ & Umbral de certeza: 0{,}7. \emph{Provisional}. \\
 Reloj adaptativo & $N_{\min}$ 2000 / $\varepsilon_{\text{obj}}$ 0{,}005 / $k$ 3 / tope 1{,}5 s / $\eta$ 0{,}5 & Monte Carlo (§1.2) \\
 Umbrales de modo & 15 / 25 bb & Modo de juego (§1.4) \\
 Tamaño de apertura & 2{,}5 bb & Preflop (§1.5) \\
+Iso-raise por limper $\iota$ & 1{,}0 bb (regla apagada por defecto: \code{limpers\_menu}) & Preflop con limpers (§1.5) \\
+Piso del iso-raise $m_{\text{iso}}$ & 1{,}25 & Preflop con limpers (§1.5) \\
+Apertura vs station $T_{\text{vs}}$ & 2{,}5 bb (= sin efecto); umbral $\pi_{\text{station}}\ge0{,}7$ & Preflop (§1.5) \\
 Constantes de $c(x)$ & 0{,}65 / 0{,}55 / +0{,}12 & Fold equity de población (§1.7) \\
 Umbrales de tipo de apuesta & 0{,}50 / 0{,}25 & Valor, semi-farol, farol (§1.11) \\
 Regla de compromiso & $\tfrac13$ del stack & Modo intermedio (§1.11) \\

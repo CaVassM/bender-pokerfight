@@ -140,6 +140,14 @@ class Capa1:
         preflop = not board
         hubo_subida = turno.estado.apuesta_actual > turno.bb
 
+        # §1.5 "Preflop con limpers": nadie subió pero alguien igualó la ciega. Con `apertura.limpers_menu` se decide con el
+        # menú de EV/utilidad (retirarse, igualar, iso-raise, all-in) en vez de la tabla de apertura, que no ve a los limpers.
+        lim = turno.limpers() if (preflop and not hubo_subida and p["apertura"]["limpers_menu"]) else []
+        if lim and modo != "push_fold":
+            tam, vs = self._tam_apertura_bb(turno)
+            iso_bb = tam + p["apertura"]["iso_por_limper"] * len(lim)
+            info["limpers"] = {"n": len(lim), "ids": [r.id for r in lim], "apertura_bb": tam, "vs_station": vs, "iso_bb": round(iso_bb, 2)}
+            return self._menu(turno, mesa, mano, board, modo, info, pushfold=False, iso_bb=iso_bb)
         if preflop and not hubo_subida and turno.C > 0 and modo != "push_fold":
             return self._apertura(turno, mano, info)
         return self._menu(turno, mesa, mano, board, modo, info, pushfold=(preflop and modo == "push_fold"))
@@ -155,9 +163,28 @@ class Capa1:
         abre = clase in set(R.clases_top(top))
         info.update({"decision": "apertura", "clase": clase, "top_pos": top, "abre": abre})
         if abre:
-            monto = int(round(p["apertura"]["tamano_bb"] * turno.bb))
-            return turno.apostar(monto), f"apertura {clase} desde {turno.mi_posicion} (top {top}%) a {p['apertura']['tamano_bb']} bb", info
+            tam, vs = self._tam_apertura_bb(turno)
+            info["apertura_bb"], info["vs_station"] = tam, vs
+            monto = int(round(tam * turno.bb))
+            return turno.apostar(monto), f"apertura {clase} desde {turno.mi_posicion} (top {top}%) a {tam} bb", info
         return {"tipo": "fold"}, f"{clase} fuera del top {top}% de {turno.mi_posicion}: me retiro (sin limp)", info
+
+    ORDEN_PREFLOP = {"BTN/SB": 0, "UTG": 0, "HJ": 1, "CO": 2, "BTN": 3, "SB": 4, "BB": 5}      # quién habla antes preflop
+
+    def _tam_apertura_bb(self, turno):
+        """Tamaño de apertura en bb: `apertura.tamano_bb`, o `apertura_vs_station` si el rival que habla DESPUÉS de Bender y más
+        paga es station con π_station >= vs_station_pi (un station paga igual: se le cobra más). Devuelve (bb, usó_vs_station)."""
+        a = self.p["apertura"]
+        base, vs = a["tamano_bb"], a.get("apertura_vs_station", a["tamano_bb"])
+        if vs == base or self.memoria is None:
+            return base, False
+        pos = posiciones(turno.estado)
+        mia = self.ORDEN_PREFLOP.get(pos.get(turno.mi_id, ""), None)
+        if mia is None:
+            return base, False
+        despues = [r for r in turno.rivales if self.ORDEN_PREFLOP.get(pos.get(r.id, ""), -1) > mia]
+        pi_st = max((self.memoria.pi(r.id).get("station", 0.0) for r in despues), default=0.0)
+        return (vs, True) if pi_st >= a["vs_station_pi"] else (base, False)
 
     # ------------------------------------------------------------------ rangos y equity
     def _rangos_rivales(self, turno, mano, board):
@@ -202,7 +229,7 @@ class Capa1:
                 "parada": res.parada, "e_ref": None if res.e_ref is None else round(res.e_ref, 4)}
 
     # ------------------------------------------------------------------ §1.6 a §1.11
-    def _menu(self, turno, mesa, mano, board, modo, info, pushfold):
+    def _menu(self, turno, mesa, mano, board, modo, info, pushfold, iso_bb=None):
         p = self.p
         P, C_, bb = turno.P, turno.C, turno.bb
         yo = turno.yo
@@ -231,6 +258,10 @@ class Capa1:
         if responden and (turno.puede("bet") or turno.puede("raise") or turno.puede("allin")):
             tamanos = [] if pushfold else list(p["menu"]["tamanos"])
             acciones = [(f"x={x}", turno.apostar_pozo(x)) for x in tamanos] + [("all-in", turno.todo())]
+            if iso_bb is not None:           # preflop con limpers (§1.5): un solo tamaño, apertura + iso_por_limper bb por limper
+                acciones = [("iso-raise", turno.apostar(int(round(iso_bb * bb))))]
+                if modo != "profundo" or p["apertura"]["limpers_allin_profundo"]:
+                    acciones.append(("all-in", turno.todo()))
             for nombre, acc in acciones:
                 if acc["tipo"] not in ("bet", "raise", "allin"):
                     continue
@@ -307,6 +338,13 @@ class Capa1:
                 e_prima = self._e_prima(mesa, mano, board, rangos, responden, cs, c["nombre"], t_max / (1 + len(apuestas)),
                                         ep_cache, info, fijos=[r for r in rivales if r not in responden])
                 c["e_prima"] = e_prima
+                if iso_bb is not None and c["nombre"] == "iso-raise":
+                    # Preflop con limpers: e' ya es contra los n_pago pagadores, así que el bote al que le pagan también tiene
+                    # las fichas de TODOS ellos (no solo las del mayor): A' = Σ de lo que agrega cada pagador.
+                    n_pago = max(1, min(len(responden), int(round(sum(cs.values())))))
+                    pagan = sorted(responden, key=lambda r: -cs[r.id])[:n_pago]
+                    A_p = sum(max(0, min(monto - r.apuesta_ronda, r.saldo)) for r in pagan)
+                    c["n_pago"] = n_pago
                 c["ev"] = ev_apuesta(f, P, e_prima, A_ef, A_p)
                 c["x"], c["A"], c["A_prima"], c["f"], c["c"] = round(x, 3), A_ef, A_p, round(f, 4), {k: round(v, 3) for k, v in cs.items()}
                 c["f_exacta"] = f                                    # sin redondear: la utilidad (§1.13) usa el mismo f
@@ -337,13 +375,17 @@ class Capa1:
             c["descartada"] = None
             if c["clase"] == "apuesta":
                 ep = c["e_prima"]
-                if len(responden) >= d["multiway_rivales"] and ep < d["umbral_valor"]:      # solo cuentan los que pueden responder
+                if len(responden) >= d["multiway_rivales"] and ep < d["umbral_valor"] and iso_bb is None:   # solo cuentan los que pueden responder; el iso-raise no es un farol
                     c["descartada"] = f"multiway: {len(responden)} respondedores y e'={ep:.2f}<{d['umbral_valor']}"
+                if iso_bb is not None and c["nombre"] == "iso-raise" and p["apertura"]["iso_margen"] > 0:
+                    piso = p["apertura"]["iso_margen"] / (c["n_pago"] + 1)
+                    if ep < piso:
+                        c["descartada"] = f"iso: e'={ep:.2f} < {piso:.2f} (parte justa con {c['n_pago']} pagadores x {p['apertura']['iso_margen']})"
                 if ep < d["umbral_valor"]:
                     # Variantes opcionales (apagadas por defecto: no son del .tex; ver params.py)
                     if d["allin_profundo_solo_valor"] and modo == "profundo" and c["accion"]["tipo"] == "allin":
                         c["descartada"] = f"variante: all-in en modo profundo solo con valor (e'={ep:.2f})"
-                    if d["solo_valor_sobre_apuesta"] and C_ > 0:
+                    if d["solo_valor_sobre_apuesta"] and C_ > 0 and iso_bb is None:        # el iso-raise no sube sobre una apuesta: sobre limps
                         c["descartada"] = f"variante: subir sobre una apuesta solo con valor (e'={ep:.2f})"
             # §1.11: la regla de compromiso es SOLO del modo intermedio (nunca en push/fold ni en profundo). Y igualar un all-in
             # ajeno que pone todas las fichas de Bender es la opción "all-in" (queda all-in o retirarse): no se descarta.
