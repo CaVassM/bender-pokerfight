@@ -227,6 +227,37 @@ PARAMS = {
     },
     # --- Registro -----------------------------------------------------------------
     "registro": {"mensajes": True},  # False = no guarda cada mensaje crudo (corridas largas de evaluación)
+    # --- Capa 3, paso 2: bandido ONLINE sobre brazos de parámetros (bender/docs/bender_formulas_rl.tex, Parte 2) ---------
+    # APAGADO por defecto: con activo=False Bender decide exactamente como siempre (el módulo ni se carga). Con activo=True el
+    # bandido elige UN brazo por mano (al llegar el mano_inicio) y aplica su sobreescritura de parámetros sobre los valores base.
+    "bandido": {
+        "activo": False,
+        "selector": "ucb",            # "ucb" (UCB con descuento) | "exp3" (Exp3 con piso de probabilidad) | "fijo" (siempre brazo_inicial)
+        "brazo_inicial": "base",      # brazo de arranque, de los bots del kit reconocidos y de los empates
+        "orden": ["base", "c05", "c24"],
+        # Cada brazo es una sobreescritura parcial de los parámetros (se mezcla con las mismas reglas que -params). "base" = los
+        # valores por defecto. c05 y c24 son las finalistas del halving h1 SIN s_prior: la fuerza del prior Beta se fija al crear
+        # al rival y no se puede cambiar en línea (y su efecto medido fue nulo, t = +0,63).
+        "brazos": {
+            "base": {},
+            "c05": {"riesgo": {"K": 6251}, "olvido": {"lambda": 0.99432}, "explotacion": {"rho_max": 0.6045, "kappa": 1.5556},
+                    "apertura": {"tamano_bb": 2.278, "iso_por_limper": 1.255, "apertura_vs_station": 3.084,
+                                 "top_pos": {"UTG": 13.47, "HJ": 17.8, "CO": 24.02, "BTN": 40.79, "SB": 31.08, "BTN_SB_HU": 65.94}},
+                    "decision": {"allin_profundo_solo_valor": True, "solo_valor_sobre_apuesta": True}},
+            "c24": {"riesgo": {"K": 5204}, "olvido": {"lambda": 0.99404}, "explotacion": {"rho_max": 0.6758, "kappa": 0.7684},
+                    "apertura": {"tamano_bb": 2.643, "iso_por_limper": 1.344, "apertura_vs_station": 2.522,
+                                 "top_pos": {"UTG": 14.33, "HJ": 18.93, "CO": 25.55, "BTN": 43.38, "SB": 33.06, "BTN_SB_HU": 70.13}},
+                    "decision": {"allin_profundo_solo_valor": True, "solo_valor_sobre_apuesta": False}},
+        },
+        "s_shrink": 10.0,             # s: observaciones de peso del nivel superior en el shrinkage rival -> tipo -> global
+        "K_recompensa": 10_000,       # K0 de la recompensa Δ ln(S + K0) por mano (fijo: comparable entre brazos)
+        "descuento": 0.995,           # γ por mano sobre conteos y sumas (ventana ≈ 200 manos)
+        "c_ucb": 1.0,                 # peso del bono de exploración (en desviaciones estándar de la recompensa)
+        "exp3_p_min": 0.02,           # probabilidad mínima de cada brazo en Exp3
+        "sigma0": 0.03, "n_sigma0": 20.0,   # escala previa de la recompensa y su peso (normalización z = r / σ̂)
+        "explorar_vs_kit": False,     # False: sin explorar cuando TODOS los rivales de la mano son bots del kit reconocidos
+        "persistir": True,            # guardar el estado en <rivales.dir>/bandido.json
+    },
     # --- Conexión (no viene del .tex) ---------------------------------------------
     "conexion": {
         "inicial_s": 60.0,        # cuánto reintentar la primera conexión

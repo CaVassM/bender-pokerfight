@@ -1,0 +1,157 @@
+\documentclass[10.5pt,a4paper]{article}
+\usepackage[margin=2.1cm,top=2.2cm,bottom=2.2cm]{geometry}
+\usepackage{fontspec}
+\usepackage{amsmath,amssymb,mathtools}
+\setmainfont{Latin Modern Roman}
+\newfontfamily\headfont{Inter}[UprightFont=* SemiBold,BoldFont=* Bold]
+\newfontfamily\labelfont{Inter}[UprightFont=* Medium]
+\usepackage{xcolor}
+\usepackage{booktabs,tabularx,array,colortbl}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{ragged2e}
+\usepackage{needspace}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{ink}{HTML}{1F2328}
+\definecolor{muted}{HTML}{5C6470}
+\definecolor{felt}{HTML}{1E6B4A}
+\definecolor{feltsoft}{HTML}{EAF4EE}
+\definecolor{line}{HTML}{CBD5CF}
+\definecolor{warnsoft}{HTML}{FBF3E4}
+\definecolor{warn}{HTML}{9A6A12}
+\color{ink}
+
+\raggedbottom
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+\RaggedRight
+\hyphenpenalty=10000
+\sloppy
+
+\titleformat{\section}{\headfont\Large\color{felt}}{\thesection}{0.6em}{}[\vspace{-2pt}{\color{line}\rule{\linewidth}{0.6pt}}]
+\titleformat{\subsection}{\headfont\normalsize}{\thesubsection}{0.5em}{}
+\titlespacing*{\section}{0pt}{14pt}{6pt}
+\titlespacing*{\subsection}{0pt}{10pt}{3pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyfoot[L]{\labelfont\footnotesize\color{muted} Bender · Hoja de fórmulas · Parte 2: aprendizaje (Capa 3)}
+\fancyfoot[R]{\labelfont\footnotesize\color{muted}\thepage}
+
+\newtcolorbox{formbox}[2][]{enhanced,before upper={\RaggedRight},colback=white,colframe=line,boxrule=0.6pt,arc=3pt,
+  left=8pt,right=8pt,top=6pt,bottom=6pt,
+  title={\headfont\small #2},coltitle=felt,colbacktitle=feltsoft,
+  attach boxed title to top left={yshift=-2.2mm,xshift=6pt},
+  boxed title style={boxrule=0pt,arc=2pt,colback=feltsoft},#1}
+\newtcolorbox{notebox}{enhanced,breakable,before upper={\RaggedRight},colback=warnsoft,colframe=warnsoft,boxrule=0pt,arc=3pt,left=8pt,right=8pt,top=5pt,bottom=5pt}
+
+\newenvironment{params}{\par\smallskip\renewcommand{\arraystretch}{1.25}\small
+  \tabularx{\linewidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}X@{}}
+  \toprule {\labelfont Parámetro} & {\labelfont Qué es y de dónde sale}\\ \midrule}
+  {\bottomrule\endtabularx\par}
+\newcommand{\uso}[1]{\par\smallskip{\labelfont\small\color{felt} Cómo usarla.}\ {\small #1}}
+\newcommand{\ej}[1]{\par\smallskip{\labelfont\small\color{muted} Ejemplo.}\ {\small #1}}
+\newcommand{\code}[1]{{\ttfamily\small #1}}
+
+\let\oldsection\section
+\renewcommand{\section}{\needspace{16\baselineskip}\oldsection}
+\begin{document}
+
+{\headfont\color{felt}\Huge Bender\par}
+\vspace{2pt}
+{\headfont\Large Hoja de fórmulas · Parte 2: aprendizaje (Capa 3)\par}
+\vspace{4pt}
+{\color{muted}Cómo elige Bender entre varios juegos de parámetros (\emph{brazos}) mientras juega. La Capa 0--2 no cambia: un brazo solo sobreescribe parámetros de \code{params.py}. El código vive en \code{bandido.py}; los valores vigentes, en la sección \code{bandido} de \code{params.py}. Notación de la Parte 1.\par}
+\vspace{6pt}
+
+\begin{notebox}\small
+\textbf{Qué esperar.} La recompensa de una mano es muy ruidosa frente a la diferencia entre brazos: con unas 500 manos por campeonato el bandido casi no puede distinguir brazos parecidos. Por eso el diseño es conservador: valor compartido por tipo de rival, descuento largo, y sin explorar contra bots del kit ya reconocidos. Su techo realista es el del mejor brazo fijo; lo que evita es elegir mal el brazo contra un rival que no se conoce.
+\end{notebox}
+
+\section*{0 · Notación}
+
+\begin{params}
+$a\in\mathcal A$ & Brazo: sobreescritura parcial de los parámetros. Hoy $\mathcal A=\{\text{base},\,c05,\,c24\}$ (base = valores por defecto; $c05$ y $c24$ salen del halving offline, sin $s_{\text{prior}}$). \\
+$h$ & Una mano; $t$ el número de manos ya liquidadas. \\
+$R_h$ & Rivales a los que se les repartieron cartas al empezar la mano $h$ (sin Bender). \\
+$\ell\in\{\text{rival},\text{tipo},\text{global}\}$ & Nivel de agregación del valor. \\
+$n^\ell_a,\ Q^\ell_a$ & Peso (conteo con descuento) y valor medio del brazo $a$ en el nivel $\ell$. \\
+$s$ & Observaciones de peso del nivel superior en el shrinkage. \\
+$\gamma$ & Descuento por mano. \\
+\end{params}
+
+\section{Recompensa y brazo de cada mano}
+
+\begin{formbox}{Recompensa por mano}
+Al llegar el \code{mano\_inicio} de la mano siguiente se liquida la anterior con las fichas de ese momento ($S$ = saldo + apuesta de ronda, con las ciegas ya sumadas de vuelta):
+\[
+r_h=\ln\!\bigl(S_{h+1}+K_0\bigr)-\ln\!\bigl(S_h+K_0\bigr),\qquad K_0=10\,000\ \text{(fijo)}
+\]
+Normalización: $z_h=r_h/\hat\sigma$, con $\hat\sigma^2=\dfrac{n_0\sigma_0^2+\sum_{i<h}\gamma^{h-i}r_i^2}{n_0+\sum_{i<h}\gamma^{h-i}}$.
+\uso{Es la misma utilidad con colchón de la Parte 1 (\S1.13), pero con $K_0$ fijo para que los brazos con $K$ distinto se comparen en la misma unidad. Un brazo se juega entera la mano (se aplica antes de la primera decisión) y se acredita la recompensa de esa mano.}
+\end{formbox}
+
+\section{Valor jerárquico (shrinkage)}
+
+\begin{formbox}{Q del rival, del tipo y global}
+Para cada brazo, el valor contra el rival $j$ se encoge hacia el de su tipo, y este hacia el global:
+\[
+\tilde Q^{\text{tipo}}_a=\frac{n^{\text{tipo}}_a\,Q^{\text{tipo}}_a+s\,Q^{\text{global}}_a}{n^{\text{tipo}}_a+s}\qquad
+\tilde Q^{(j)}_a=\frac{n^{(j)}_a\,Q^{(j)}_a+s\,\tilde Q^{\text{tipo}}_a}{n^{(j)}_a+s}
+\]
+Valor del brazo en una mano con rivales $R_h$: $\;\bar Q_a=\dfrac{1}{|R_h|}\sum_{j\in R_h}\tilde Q^{(j)}_a$.
+\uso{Con pocos datos de un rival manda su tipo; con pocos del tipo, el global. $s=10$ observaciones al empezar. Tipo = el bot del kit reconocido por la huella de montos (\S2.7) o, si no hay, el tipo dominante de $\pi_t$ (\S2.3). Cada mano acredita a cada rival de $R_h$, una vez a cada tipo distinto y una vez al global, siempre al brazo jugado. Conteos y sumas llevan descuento: $n\leftarrow\gamma n+1,\ \Sigma\leftarrow\gamma\Sigma+z$.}
+\ej{$n^{(j)}=10,\ Q^{(j)}=1$; tipo $n=30,\ Q=0{,}5$; global $n=100,\ Q=0$; $s=10$: $\tilde Q^{\text{tipo}}=(30\cdot0{,}5+10\cdot0)/40=0{,}375$ y $\tilde Q^{(j)}=(10\cdot1+10\cdot0{,}375)/20=0{,}6875$.}
+\end{formbox}
+
+\section{Selectores}
+
+\begin{formbox}{UCB con descuento}
+\[
+a^\star=\arg\max_a\ \Bigl[\bar Q_a+c\,\sqrt{\frac{\ln\max(2,N)}{n^{\text{global}}_a}}\Bigr],\qquad N=\sum_a n^{\text{global}}_a
+\]
+Primero se prueba cada brazo una vez (el brazo inicial primero, luego en orden). $c=1$ en unidades de $\hat\sigma$.
+\end{formbox}
+
+\begin{formbox}{Exp3 con piso del 2\,\%}
+Cada paso actualiza \emph{todos} los brazos con el estimador ponderado de Exp3: con $g=\tfrac{\operatorname{clip}(z,-3,3)+3}{6}\in[0,1]$ y $p_t$ la probabilidad con que se jugó el brazo $a_t$,
+\[
+\hat g_a=\begin{cases}g/p_t & a=a_t\\ 0 & a\neq a_t\end{cases}\qquad n_a\leftarrow\gamma n_a+1,\quad \Sigma_a\leftarrow\gamma\Sigma_a+\hat g_a
+\]
+La ganancia acumulada estimada es $L_a=N_{\text{pasos}}\,\bar Q_a$ (con $\bar Q$ jerárquico) y la probabilidad de jugar $a$:
+\[
+w_a\propto e^{\eta L_a},\quad p_a=p_{\min}+(1-K p_{\min})\frac{w_a}{\sum_b w_b},\qquad \eta=\sqrt{\frac{2\ln K}{K\,T}},\ \ T=\min\!\Bigl(1000,\tfrac{1}{1-\gamma}\Bigr),\ \ p_{\min}=0{,}02
+\]
+\uso{$K$ es el número de brazos aquí. Con las diferencias de valor que se esperan, $p$ queda cerca de uniforme: Exp3 mezcla los brazos y casi no apuesta a uno solo.}
+\end{formbox}
+
+\begin{formbox}{Sin explorar contra bots del kit reconocidos}
+Si todos los rivales de $R_h$ son bots del kit reconocidos (huella $\ge 0{,}9$) no se explora: se juega $\arg\max_a\bar Q_a$ (empates: el brazo inicial). Con Exp3 esas manos no actualizan nada, porque sin azar en la elección no hay $p_t$ que ponderar; con UCB sí se acredita el brazo jugado.
+\end{formbox}
+
+\section{Parámetros}
+
+\begin{params}
+$s$ \code{s\_shrink} & 10 observaciones (decisión del equipo). \\
+$K_0$ \code{K\_recompensa} & 10\,000. \\
+$\gamma$ \code{descuento} & 0,995 por mano (ventana $\approx 200$ manos). \\
+$c$ \code{c\_ucb} & 1,0. \\
+$p_{\min}$ \code{exp3\_p\_min} & 0,02 (decisión del equipo). \\
+$\sigma_0,\ n_0$ & 0,03 y 20: escala previa de $r$ y su peso, solo para arrancar $\hat\sigma$. \\
+\code{explorar\_vs\_kit} & Falso: sin explorar contra bots del kit reconocidos. \\
+\code{brazos} & $c05$: $K=6251$, $\lambda=0{,}99432$, $\rho_{\max}=0{,}6045$, $\kappa=1{,}5556$, apertura 2,278 bb, iso 1,255, vs station 3,084, rangos $\times0{,}942$. $c24$: $K=5204$, $\lambda=0{,}99404$, $\rho_{\max}=0{,}6758$, $\kappa=0{,}7684$, apertura 2,643 bb, iso 1,344, vs station 2,522, rangos $\times1$, sin la regla de solo valor sobre apuesta. \\
+\end{params}
+
+\begin{notebox}\small
+\textbf{Qué no cambia un brazo.} La fuerza del prior Beta $s_{\text{prior}}$ de la Capa 2 (se fija al crear al rival y el halving midió un efecto nulo, $t=+0{,}63$). $\lambda$ sí cambia: se aplica en cada actualización de la memoria. En la arena real el ID de un rival puede cambiar entre enfrentamientos; entonces el valor por rival casi no se acumula y mandan el tipo y el global: es la razón del shrinkage.
+\end{notebox}
+
+\section{Búsqueda offline de los brazos (paso 1)}
+
+Los brazos $c05$ y $c24$ salieron de un \emph{successive halving} sobre 48 configuraciones (11 parámetros: 9 continuos y 2 interruptores) en el campo de entrenamiento de 28 participantes. Rondas con 12, 36, 108 y 216 campeonatos acumulados y semillas anidadas; las tres primeras ordenan por puesto medio emparejado contra la base y la cuarta por $P(\text{top 6})$. Se validaron con 150 campeonatos de semillas nuevas, y luego con 450 más (paso de confirmación). Las diferencias son emparejadas por semilla con IC 95\,\% por bootstrap.
+
+\end{document}

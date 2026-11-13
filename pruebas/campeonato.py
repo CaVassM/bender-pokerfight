@@ -40,6 +40,25 @@ BB = 100
 # evalúa con la utilidad apagada (riesgo neutral); con --bender-v1-dir corre el main.py de otra carpeta (p. ej. el worktree del tag
 # v1-probabilistico). Cada copia lleva su propia carpeta de memoria y su propio log.
 BENDER_V1_DIR = None
+# Fijado a «v1.2-fix con la utilidad apagada»: las reglas nuevas (limpers) también apagadas aunque cambien los valores por defecto.
+PARAMS_BENDER_V1 = {"riesgo": {"utilidad": False}, "apertura": {"limpers_menu": False}}
+# Copias de Bender con OTRO estilo (campo «desconocido» del paso 2 de la Capa 3): corren el código que se evalúa con estos cambios.
+# Los rangos de apertura son los de params.py × la escala (tope 100 %); deben coincidir con apertura.top_pos de params.py.
+TOP_POS_BASE = {"UTG": 14.3, "HJ": 18.9, "CO": 25.5, "BTN": 43.3, "SB": 33.0, "BTN_SB_HU": 70.0}
+
+
+def _top_pos(escala):
+    return {k: round(min(100.0, v * escala), 2) for k, v in TOP_POS_BASE.items()}
+
+
+COPIAS_BENDER = {
+    # K = 40 000 (casi neutral al riesgo), sin las reglas de solo valor y con rangos de apertura 15 % más anchos
+    "bender_agresivo": {"riesgo": {"K": 40_000},
+                        "decision": {"allin_profundo_solo_valor": False, "solo_valor_sobre_apuesta": False},
+                        "apertura": {"top_pos": _top_pos(1.15)}},
+    # K = 4 000 (más averso al riesgo) y rangos de apertura 15 % más estrechos
+    "bender_prudente": {"riesgo": {"K": 4_000}, "apertura": {"top_pos": _top_pos(0.85)}},
+}
 
 
 def wilson(k, n, z=1.96):
@@ -74,13 +93,12 @@ def armar(semilla, campo, ruta_params_bender, dir_t):
                 break
         if tipo == "bender":
             cmd = [sys.executable, E.BENDER_MAIN, "-silencioso", "-params", ruta_params_bender, "-log", os.path.join(dir_t, "bender.jsonl")]
-        elif tipo == "bender_v1":
+        elif tipo == "bender_v1" or tipo in COPIAS_BENDER:
             ruta_rival = os.path.join(dir_t, f"params-{alias}.json")
+            propios = PARAMS_BENDER_V1 if tipo == "bender_v1" else COPIAS_BENDER[tipo]
             with open(ruta_rival, "w", encoding="utf-8") as f:
-                # Fijado a «v1.2-fix con la utilidad apagada»: las reglas nuevas (limpers) también apagadas aunque cambien los valores por defecto.
-                json.dump({"riesgo": {"utilidad": False}, "apertura": {"limpers_menu": False},
-                           "rivales": {"dir": os.path.join(dir_t, f"rivales-{alias}")}, "registro": {"mensajes": False}}, f)
-            main_v1 = os.path.join(BENDER_V1_DIR, "main.py") if BENDER_V1_DIR else E.BENDER_MAIN
+                json.dump({**propios, "rivales": {"dir": os.path.join(dir_t, f"rivales-{alias}")}, "registro": {"mensajes": False}}, f)
+            main_v1 = os.path.join(BENDER_V1_DIR, "main.py") if (BENDER_V1_DIR and tipo == "bender_v1") else E.BENDER_MAIN
             cmd = [sys.executable, main_v1, "-silencioso", "-params", ruta_rival, "-log", os.path.join(dir_t, f"{alias}.jsonl")]
         else:
             cmd = E.comando_rival_arena(tipo)

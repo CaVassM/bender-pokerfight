@@ -28,6 +28,11 @@ class Bender:
             self.memoria = Memoria(params)
             self.obs = Observador(params, self.memoria)
         self.capa1 = Capa1(params, memoria=self.memoria)
+        # Capa 3 (paso 2): bandido online sobre brazos de parámetros. Apagado por defecto: ni siquiera se importa.
+        self.bandido = None
+        if params["bandido"]["activo"]:
+            from bandido import Bandido
+            self.bandido = Bandido(params, registro, self.memoria)
 
     def _observar(self, mensaje):
         """Alimenta la memoria de rivales. Un fallo aquí nunca puede afectar la decisión."""
@@ -56,6 +61,11 @@ class Bender:
             estado = EstadoPublico.de_dict(mensaje.get("estado"))
             cartas = [carta_de_dict(c) for c in mensaje.get("cartas") or []]
             self.mesa.nueva_mano(estado, cartas)
+            if self.bandido is not None:           # liquida la mano anterior y elige el brazo de esta, antes de la primera decisión
+                try:
+                    self.bandido.nueva_mano(estado, self.mi_id, self.mesa.stacks0)
+                except Exception:
+                    self.registro.escribir("error", donde="bandido", traza=traceback.format_exc())
             self.registro.escribir("mano_inicio", id_mano=estado.id_mano, cartas=texto_cartas(cartas),
                                    mesa_manos=self.mesa.manos_mesa, mesa_s=round(self.mesa.segundos_mesa, 1))
         elif tipo == "estado":
