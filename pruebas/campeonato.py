@@ -115,7 +115,7 @@ def correr_torneo(semilla, campo, ruta_params, dir_base, rondas, manos):
     with open(ruta_params, encoding="utf-8") as f:
         p = json.load(f)
     p.setdefault("rivales", {})["dir"] = os.path.join(dir_t, "rivales")        # la memoria se acumula entre rondas
-    p.setdefault("registro", {})["mensajes"] = False
+    p.setdefault("registro", {})["mensajes"] = bool(os.environ.get("BENDER_MENSAJES"))     # solo para pruebas que miran las pilas (medir_sidepots.py)
     ruta_p = os.path.join(dir_t, "params-bender.json")
     with open(ruta_p, "w", encoding="utf-8") as f:
         json.dump(p, f)
