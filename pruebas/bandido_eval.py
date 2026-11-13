@@ -39,11 +39,16 @@ def variantes_bandido():
 
 def diagnostico(cor, cfg, bloque, semillas):
     """Lee los logs del bandido: uso de cada brazo, % explorando y recompensa media (z y bb) por brazo."""
-    uso, expl, n, rec = {}, 0, 0, {}
+    uso, expl, n, rec, recon = {}, 0, 0, {}, {}
     for s in semillas:
-        ruta = os.path.join(cor.dir_cfg(cfg, bloque), f"t{s}", "bender.jsonl")
+        dir_t = os.path.join(cor.dir_cfg(cfg, bloque), f"t{s}")
+        ruta = os.path.join(dir_t, "bender.jsonl")
         if not os.path.exists(ruta):
             continue
+        try:                                                      # tipo REAL de cada alias, para ver qué reconoce Bender de cada uno
+            reales = {p["id"]: p["tipo"] for p in json.load(open(os.path.join(dir_t, "torneo.json"), encoding="utf-8"))["participantes"]}
+        except (OSError, ValueError, KeyError):
+            reales = {}
         with open(ruta, encoding="utf-8") as f:
             for linea in f:
                 if '"tipo":"bandido",' in linea:
@@ -51,10 +56,13 @@ def diagnostico(cor, cfg, bloque, semillas):
                     uso[r["brazo"]] = uso.get(r["brazo"], 0) + 1
                     expl += bool(r["explorar"])
                     n += 1
+                    for rv in r["rivales"]:
+                        d = recon.setdefault(reales.get(rv["id"], "?"), {})
+                        d[rv["tipo"]] = d.get(rv["tipo"], 0) + 1
                 elif '"tipo":"bandido_recompensa"' in linea:
                     r = json.loads(linea)
                     rec.setdefault(r["brazo"], []).append((r["z"], (r["S1"] - r["S0"]) / CAMP.BB))
-    return n, uso, expl, rec
+    return n, uso, expl, rec, recon
 
 
 def tabla(L, etiqueta, cor_sel, cfg_sel, bloque_sel, referencias, sem):
@@ -86,7 +94,7 @@ def absolutos(L, cor, cfg, bloque, sem, etiqueta):
 
 
 def diag_texto(L, nombre, cor, cfg, bloque, sem):
-    n, uso, expl, rec = diagnostico(cor, cfg, bloque, sem)
+    n, uso, expl, rec, recon = diagnostico(cor, cfg, bloque, sem)
     if not n:
         return
     L.append(f"- **{nombre}** ({n} manos con elección): uso " + ", ".join(f"{a} {100 * k / n:.1f} %" for a, k in sorted(uso.items())) +
@@ -96,6 +104,13 @@ def diag_texto(L, nombre, cor, cfg, bloque, sem):
         zs, bbs = [x[0] for x in v], [x[1] for x in v]
         filas.append(f"{a}: z̄ {statistics.fmean(zs):+.3f} (±{statistics.stdev(zs) / len(zs) ** 0.5:.3f}), {statistics.fmean(bbs):+.2f} bb/mano, {len(v)} manos")
     L.append("  - recompensa media por brazo jugado: " + "; ".join(filas))
+    # Qué cree Bender que es cada tipo REAL de rival (clave «bot:x» = reconocido como bot del kit por la huella; «tipo:t» = tipo dominante)
+    cre = []
+    for real, d in sorted(recon.items()):
+        tot = sum(d.values())
+        top = sorted(d.items(), key=lambda kv: -kv[1])[:3]
+        cre.append(f"{real}: " + ", ".join(f"{k} {100 * v / tot:.0f} %" for k, v in top))
+    L.append("  - lo que Bender cree de cada rival (por tipo real): " + "; ".join(cre))
 
 
 def main():
