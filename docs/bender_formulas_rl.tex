@@ -95,6 +95,15 @@ Normalización: $z_h=r_h/\hat\sigma$, con $\hat\sigma^2=\dfrac{n_0\sigma_0^2+\su
 \uso{Es la misma utilidad con colchón de la Parte 1 (\S1.13), pero con $K_0$ fijo para que los brazos con $K$ distinto se comparen en la misma unidad. Un brazo se juega entera la mano (se aplica antes de la primera decisión) y se acredita la recompensa de esa mano.}
 \end{formbox}
 
+\begin{formbox}{Promedio incremental y Q-learning sin estados}
+El valor de un brazo es un promedio con descuento que se actualiza sin guardar la historia. Con el brazo $a$ jugado y la recompensa normalizada $z$:
+\[
+n_a\leftarrow\gamma\,n_a+1,\qquad Q_a\leftarrow Q_a+\frac{1}{n_a}\bigl(z-Q_a\bigr)
+\]
+Es la actualización de Q-learning $Q(a)\leftarrow Q(a)+\alpha\,(z-Q(a))$ en un problema \emph{sin estados} (un solo estado, sin transición, factor de descuento de retorno $0$) con paso $\alpha=1/n_a$. Con $\gamma=1$ es el promedio muestral; con $\gamma<1$ olvida: pesa unas $1/(1-\gamma)$ manos.
+\uso{Es lo que implementa \code{bandido.py}: no hay estados de mesa ni función de valor sobre manos. Un Q-learning \emph{con} estados (PPO sobre la mano) quedó descartado por el equipo para el torneo, así que esta hoja no lo cubre. El mismo promedio se lleva en tres niveles (rival, tipo, global) y se mezcla con el shrinkage de abajo.}
+\end{formbox}
+
 \section{Valor jerárquico (shrinkage)}
 
 \begin{formbox}{Q del rival, del tipo y global}
@@ -150,8 +159,49 @@ $\sigma_0,\ n_0$ & 0,03 y 20: escala previa de $r$ y su peso, solo para arrancar
 \textbf{Qué no cambia un brazo.} La fuerza del prior Beta $s_{\text{prior}}$ de la Capa 2 (se fija al crear al rival y el halving midió un efecto nulo, $t=+0{,}63$). $\lambda$ sí cambia: se aplica en cada actualización de la memoria. En la arena real el ID de un rival puede cambiar entre enfrentamientos; entonces el valor por rival casi no se acumula y mandan el tipo y el global: es la razón del shrinkage.
 \end{notebox}
 
-\section{Búsqueda offline de los brazos (paso 1)}
+\section{Búsqueda offline de los brazos (successive halving)}
 
-Los brazos $c05$ y $c24$ salieron de un \emph{successive halving} sobre 48 configuraciones (11 parámetros: 9 continuos y 2 interruptores) en el campo de entrenamiento de 28 participantes. Rondas con 12, 36, 108 y 216 campeonatos acumulados y semillas anidadas; las tres primeras ordenan por puesto medio emparejado contra la base y la cuarta por $P(\text{top 6})$. Se validaron con 150 campeonatos de semillas nuevas, y luego con 450 más (paso de confirmación). Las diferencias son emparejadas por semilla con IC 95\,\% por bootstrap.
+\begin{formbox}{Successive halving sobre 48 configuraciones}
+Espacio: 9 parámetros continuos ($K$, $1-\lambda$, $\rho_{\max}$, $\kappa$, $s_{\text{prior}}$, tamaño de apertura, escala de los rangos de apertura, \code{iso\_por\_limper}, \code{apertura\_vs\_station}) y 2 interruptores (\code{allin\_profundo\_solo\_valor}, \code{solo\_valor\_sobre\_apuesta}). Se muestrean 12 puntos de hipercubo latino por cada uno de los 4 casos de interruptores (48 configuraciones) más la base.
+\[
+\text{ronda }r:\quad n_r\in\{12,\,36,\,108,\,216\}\ \text{campeonatos acumulados},\qquad \text{pasan}\ \{16,\,5,\,2\}
+\]
+Las semillas están anidadas (las de una ronda se reutilizan en la siguiente). Rondas 1--3 ordenan por $\Delta$ puesto medio emparejado contra la base; ronda 4 y validación, por $\Delta P(\text{top 6})$ emparejado. Validación con 150 campeonatos de semillas nuevas: solo se cambia un valor por defecto si el IC 95\,\% de $\Delta P(\text{top 6})$ excluye el 0.
+\uso{El campo es el de entrenamiento de 28: 6 bots del kit $\times 4$ + 3 \code{bender\_v1} + el candidato. Las diferencias se calculan por semilla (mismo sorteo de mesas y cartas) y el IC sale de un bootstrap de los pares.}
+\end{formbox}
+
+\section{Resultados y por qué el bandido no ganó}
+
+\begin{notebox}\small
+\textbf{Resumen.} Nada de lo que se probó en la Capa 3 le ganó a \code{v1.3-limpers} con un IC 95\,\% que excluya el 0 en $P(\text{top 6})$ en el campo de entrenamiento. El bandido online quedó por debajo de sus propios brazos. No hay \code{v2-rl}.
+\end{notebox}
+
+\subsection{Lo que se midió}
+
+\begin{params}
+Halving (paso 1) & Ninguna finalista ganó en la validación (150 semillas): $c05$ $+8{,}7$ pts (IC $-2{,}0$ a $+19{,}3$), $c24$ $+5{,}3$ (IC $-5{,}3$ a $+15{,}3$). \\
+Confirmación (450 semillas nuevas; $c05$ y $c24$ acumulan 150 más) & $k6k$ $+0{,}7$ (IC $-5{,}1$ a $+6{,}2$), $c24$ $+0{,}5$ (IC $-4{,}3$ a $+5{,}7$), $c05$ $+2{,}2$ (IC $-2{,}7$ a $+7{,}3$). Suben $\mathrm{bb}/100$ ($+77$ a $+93$) pero no $P(\text{top 6})$. \\
+Bandido, campo de entrenamiento (450 semillas) & $P(\text{top 6})$: base 66,4\,\%, UCB 62,0\,\%, Exp3 62,9\,\%. $\Delta$ contra base: UCB $-4{,}4$ (IC $-10{,}0$ a $+1{,}1$), Exp3 $-3{,}6$ (IC $-9{,}3$ a $+2{,}0$). \\
+Bandido, campo desconocido (100 semillas) & base 31\,\%, $c05$ fijo 45\,\%, UCB 32\,\%, Exp3 37\,\%. UCB queda $13{,}0$ pts por debajo de $c05$ (IC $-23{,}0$ a $-3{,}0$). \\
+\end{params}
+
+\subsection{Por qué no ganó}
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=2pt]
+\item \textbf{Los brazos casi no se distinguen por mano.} Con 135\,000 manos, la recompensa media por brazo jugado fue $\bar z=+0{,}083,\ +0{,}074,\ +0{,}065$ con error estándar $\pm0{,}007$: diferencias de uno o dos errores estándar entre brazos que el mismo campeonato muestra con $P(\text{top 6})$ prácticamente iguales (base 66,4\,\%, $c05$ 66,4\,\%, $c24$ 65,3\,\%).
+\item \textbf{El ruido manda.} Una mano mueve $\ln(S+K)$ muchas veces más de lo que cualquier brazo cambia el valor esperado. Con unas 500 manos por campeonato y rivales distintos en cada ronda, el valor por rival casi no acumula datos y el shrinkage cae al tipo y al global.
+\item \textbf{UCB termina mezclando.} Con diferencias tan chicas el bono de exploración domina: usó cada brazo $\approx 1/3$ de las manos (34\,\%, 33\,\%, 33\,\%). El resultado es el promedio de los brazos más el costo de cambiar de parámetros entre manos, no el del mejor.
+\item \textbf{Exp3 no distingue más.} Se desplazó hacia base (48\,\%) y $c05$ (38\,\%), pero con piso del 2\,\% y $\eta$ chico sigue casi uniforme en el arranque de cada campeonato.
+\item \textbf{La recompensa mide fichas, no la meta.} $\Delta\ln(S+K)$ por mano premia ganar fichas; el objetivo del torneo es clasificar al top 6 sin quebrar. En el campo desconocido $c05$ fijo gana 14 pts de $P(\text{top 6})$ a la base, pero en las manos que UCB jugó con $c05$ la recompensa por mano no fue mayor ($\bar z=+0{,}019$ contra $+0{,}037$ de base, $\pm0{,}02$).
+\item \textbf{Poca ventaja que aprender.} Los brazos son variaciones de los mismos parámetros; contra el campo de entrenamiento no mejoran a la base de forma significativa (confirmación). Un bandido no puede ganar más que la mejor diferencia que hay entre sus brazos.
+\end{enumerate}
+
+\subsection{Lo que sí quedó}
+
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+\item El arreglo del stack efectivo, la regla de limpers y la utilidad con colchón (Capa 1) son lo que mejoró a Bender; no vienen de la Capa 3.
+\item Un diagnóstico: Bender reconoce a sus propias copias como el bot del kit \code{espia} entre el 38 y el 58\,\% de las manos (huella por montos de apuesta postflop), lo que activa plantillas de un bot que no es. Es el motivo de la huella corregida (umbral 0,97, al menos 8 apuestas con $z$ medido y el tamaño de la apertura preflop como evidencia).
+\item \code{bandido.py} queda apagado por defecto (\code{bandido.activo = False}) y no cambia ninguna decisión.
+\end{itemize}
 
 \end{document}
