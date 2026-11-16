@@ -183,6 +183,18 @@ PARAMS = {
             "propio":      [1 / 9] * 9,
         },
         "umbral": 0.9,
+        # Apuestas con z medido (n_z) que hacen falta para dar por reconocido a un bot del kit por su huella. 0 = sin mínimo (valor por
+        # defecto: no cambia nada). El reconocimiento por comportamiento («conservador») no usa este mínimo.
+        "min_z": 0,
+        # Evidencia extra de la huella: el tamaño de la PRIMERA subida preflop de la mano (apertura). Medido en 60 campeonatos con mensajes
+        # crudos (pruebas/medir_apertura_bots.py): base, bandido y espia abren SIEMPRE a 3 bb exactos; estadistico a 2,0-2,7 bb y
+        # aleatorio a tamaños al azar (nunca 3,0); conservador nunca sube; Bender abre a 2,5 bb. p3[bot] = P(abrir a exactamente tam_bb | bot);
+        # el de «propio» (cualquier otro equipo) es un supuesto: 3 bb es un tamaño muy común. «novato» (reserva) = el de propio.
+        # APAGADO por defecto.
+        "apertura_3bb": {
+            "activa": False, "tam_bb": 3.0, "tol": 0.005,
+            "p3": {"base": 0.996, "bandido": 0.999, "espia": 0.998, "estadistico": 0.01, "aleatorio": 0.01, "novato": 0.30, "propio": 0.30},
+        },
     },
     # --- §2.8 Rango preflop inicial -----------------------------------------------
     "preflop_rango": {"peso_top_pfr_si_paga": 0.3},

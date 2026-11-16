@@ -170,7 +170,7 @@ class Rival:
         umbral = self.p["huella"]["umbral"]
         post = self.huella()
         bot = max(post, key=post.get)
-        if bot != "propio" and post[bot] >= umbral:
+        if bot != "propio" and post[bot] >= umbral and self.n_z >= self.p["huella"].get("min_z", 0):
             return bot, post[bot]
         for nombre in self.p["conductual"]:
             pc = self.prob_conductual(nombre)
@@ -199,6 +199,17 @@ class Rival:
             self.log_huella[bot] += math.log(max(fila[bot][caja], 1e-6))
         self.n_z += 1
         self.contadores["cajas_z"][caja] += 1
+
+    def obs_apertura(self, tam_bb):
+        """Evidencia de la huella por el tamaño (en bb) de su primera subida preflop: ¿exactamente `tam_bb`? (`huella.apertura_3bb`)."""
+        cfg = self.p["huella"]["apertura_3bb"]
+        es3 = abs(tam_bb - cfg["tam_bb"]) <= cfg["tol"]
+        for bot in self.log_huella:
+            p3 = min(0.999, max(0.001, cfg["p3"].get(bot, cfg["p3"]["propio"])))
+            self.log_huella[bot] += math.log(p3 if es3 else 1.0 - p3)
+        c = self.contadores.setdefault("aperturas", {"n": 0, "tam_exacto": 0})
+        c["n"] += 1
+        c["tam_exacto"] += int(es3)
 
 
 class Memoria:
@@ -261,6 +272,7 @@ class Observador:
         self.p = params
         self.mem = memoria
         self.mi_id = mi_id
+        self.bb = 100                        # ciega grande (se actualiza con cada estado)
         self.cache = POB.CacheCategorias()
         self._nueva_mano("")
 
@@ -284,6 +296,7 @@ class Observador:
         if tipo not in ("mano_inicio", "estado", "solicitar_accion") or not msg.get("estado"):
             return
         est = EstadoPublico.de_dict(msg["estado"])
+        self.bb = est.ciega_grande or 100
         if est.id_mano != self.id_mano:
             self._nueva_mano(est.id_mano)
         if tipo == "mano_inicio" and not self.inicio_visto:
@@ -317,12 +330,15 @@ class Observador:
         z, z_enfrentada, allin = None, self.ultima_z.get(etapa), tipo == "allin"
         enfrentaba = falta > 0
         pago = 0
+        tam_bb = None                                             # tamaño en bb de la PRIMERA subida preflop de la mano (apertura)
         if tipo in ("bet", "raise"):
             pago = monto - r
             if saldo is not None and pago >= saldo:
                 allin = True                                      # apuesta recortada por el stack: no cuenta para z
             if self.pozo + falta > 0:
                 z = (monto - self.apuesta) / (self.pozo + falta)
+            if etapa == "preflop" and not allin and self.apuesta <= self.bb:
+                tam_bb = monto / self.bb
             self.apuesta = max(self.apuesta, monto)
             self.ultima_z[etapa] = None if (allin or etapa == "preflop") else z
         elif tipo == "allin":
@@ -339,7 +355,7 @@ class Observador:
         self.ronda[id_] = r + pago
 
         ev = {"id": id_, "etapa": etapa, "tipo": tipo, "enfrentaba": enfrentaba, "z": z, "z_enfrentada": z_enfrentada,
-              "allin": allin, "board": tuple(sorted(self.comunitarias[:CARTAS_DE_CALLE.get(etapa, 0)]))}
+              "allin": allin, "tam_bb": tam_bb, "board": tuple(sorted(self.comunitarias[:CARTAS_DE_CALLE.get(etapa, 0)]))}
         self.eventos.append(ev)
         if id_ != self.mi_id and self.inicio_visto:
             self._aprender_accion(ev)
@@ -349,6 +365,9 @@ class Observador:
         riv = self.mem.rival(ev["id"])
         c = riv.contadores["post"]
         if ev["etapa"] == "preflop":
+            if ev.get("tam_bb") is not None and self.p["huella"].get("apertura_3bb", {}).get("activa"):
+                riv.obs_apertura(ev["tam_bb"])                          # evidencia de la huella: tamaño de la apertura
+                self.mem.marcar(ev["id"])
             return
         if ev["tipo"] in APUESTAS:
             c["apuestas" if not ev["enfrentaba"] else "subidas"] += 1
