@@ -32,21 +32,23 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))      # params.py
 import campeonato as CAMP  # noqa: E402
 import evaluar as E  # noqa: E402
 
 SEMILLA = 18_000_000
 RIVALES = [("bender_agresivo", 1), ("bender_v1", 1), ("novato", 1), ("darwin", 1), ("bandido", 1)]
-K_ARM = {"riesgo": {"K": 20_000}}
-EV_ARM = {"riesgo": {"utilidad": False}}
+
+
 CONFIGS = {
     "a": {"nombre": "a · v1.4-final (K = 6000)", "variante": {}},
     "b": {"nombre": "b · K = 20 000", "variante": {"riesgo": {"K": 20_000}}},
     "c": {"nombre": "c · K = 40 000", "variante": {"riesgo": {"K": 40_000}}},
     "d": {"nombre": "d · utilidad apagada (EV puro)", "variante": {"riesgo": {"utilidad": False}}},
-    "e": {"nombre": "e · bandido UCB entre a, b y d",
-          "variante": {"bandido": {"activo": True, "selector": "ucb", "orden": ["a", "b", "d"], "brazo_inicial": "a",
-                                   "brazos": {"a": {}, "b": K_ARM, "d": EV_ARM}}}},
+    "e": {"nombre": "e · bandido UCB entre a, b y d", "variante": {},
+          # se inyecta con pruebas/bender_final.py (variable BENDER_BRAZOS): el validador de -params no admite brazos nuevos
+          "bandido": {"activo": True, "selector": "ucb", "orden": ["a", "b", "d"], "brazo_inicial": "a",
+                      "brazos": {"a": {}, "b": {"riesgo": {"K": 20_000}}, "d": {"riesgo": {"utilidad": False}}}}},
 }
 BB = 100
 
@@ -63,8 +65,16 @@ def correr_final(semilla, cid, dir_base, manos, max_mesa_s):
     p.setdefault("registro", {})["mensajes"] = False
     ruta_p = os.path.join(dir_t, "params-bender.json")
     json.dump(p, open(ruta_p, "w", encoding="utf-8"))
+    partes = CAMP.armar(semilla, RIVALES, ruta_p, dir_t)
+    if "bandido" in CONFIGS[cid]:                                 # config e: el sujeto arranca por el lanzador que inyecta los brazos
+        ruta_b = os.path.join(dir_t, "brazos.json")
+        json.dump(CONFIGS[cid]["bandido"], open(ruta_b, "w", encoding="utf-8"))
+        for pt in partes:
+            if pt["tipo"] == "bender":
+                pt["comando"][1] = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bender_final.py")
+                pt["entorno"] = [f"BENDER_BRAZOS={ruta_b}"]
     cfg = {"semilla": semilla, "rondas": 1, "manos": manos, "ciega_chica": 50, "ciega_grande": 100, "stack": CAMP.STACK,
-           "timeout_ms": 5000, "max_mesa_s": max_mesa_s, "participantes": CAMP.armar(semilla, RIVALES, ruta_p, dir_t)}
+           "timeout_ms": 5000, "max_mesa_s": max_mesa_s, "participantes": partes}
     ruta_cfg = os.path.join(dir_t, "torneo.json")
     json.dump(cfg, open(ruta_cfg, "w", encoding="utf-8"))
     t0 = time.time()
