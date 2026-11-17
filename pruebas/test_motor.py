@@ -207,7 +207,26 @@ def test_t_max_del_reloj():
     assert abs(t_max_de_reloj(RELOJ, 0, 0.0) - 1.44) < 1e-9               # min(1,5, 0,5·360/125)
     assert t_max_de_reloj(RELOJ, 49, 343.0) == RELOJ["t_tope"]            # 0,5·17/2,5 = 3,4 > 1,5
     assert t_max_de_reloj(RELOJ, 25, 340.0) < 0.5                         # va atrasado: se achica
-    assert t_max_de_reloj(RELOJ, 10, 400.0) == 0.0                        # se acabó el tiempo de la mesa
+    assert t_max_de_reloj(RELOJ, 10, 400.0) == RELOJ["t_piso_s"]          # se acabó el tiempo de la mesa: piso, no 0
+    assert t_max_de_reloj(RELOJ, 100, 400.0) == RELOJ["t_piso_s"]         # la final: más de 50 manos y más de 360 s
+    assert t_max_de_reloj(RELOJ, 100, 300.0) == RELOJ["t_tope"]           # más de 50 manos con tiempo: el tope de siempre
+    assert t_max_de_reloj(RELOJ, 49, 359.9) == RELOJ["t_piso_s"]          # quedan 0,1 s: 0,5·0,1/2,5 = 0,02 < piso
+    # en una mesa al día el piso no actúa
+    for m in range(0, 50):
+        al_dia = t_max_de_reloj(RELOJ, m, m * 7.2)
+        assert al_dia == min(RELOJ["t_tope"], RELOJ["eta"] * (RELOJ["t_mesa"] - m * 7.2) / (RELOJ["decisiones_por_mano"] * (50 - m)))
+        assert al_dia > RELOJ["t_piso_s"]
+
+
+def test_mesa_de_la_final_sigue_simulando_bien():
+    """(a) Mesa a los 400 s de iniciada (y más de 50 manos): la equity de un spot normal llega a N >= 2000, no a 64."""
+    muertas = C.mascara(cs("Ks Qs"))
+    rangos = [R.rango_top(30, muertas)]
+    res = estimar(cs("Ks Qs"), cs("Js 7d 2c"), rangos, RELOJ, umbrales=(0.25, 0.5), manos_jugadas=120, segundos_mesa=400.0,
+                  rng=random.Random(3))
+    assert res.t_max == RELOJ["t_piso_s"]
+    assert res.n >= RELOJ["n_min"], res.n
+    assert res.tiempo_s < 1.0
 
 
 def test_para_por_umbral_cuando_esta_lejos():

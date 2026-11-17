@@ -13,7 +13,12 @@ Cuándo parar (reloj adaptativo, §1.2): se revisa cada `revisar_cada`=64
 simulaciones y se para si
 
     N >= N_min  y  (σ_e <= ε_obj   o   |e - e_ref| >= k·σ_e)      o      t >= T_max
-    T_max = min(T_tope, η · T_rest / D_rest),  D_rest = 2,5 · (50 - manos jugadas)
+    T_max = max(T_piso, min(T_tope, η · T_rest / D_rest)),  D_rest = 2,5 · (50 - manos jugadas)
+
+T_piso (reloj.t_piso_s, 0,25 s) existe porque la final dura 1 hora en UNA mesa: pasados
+los 360 s T_rest es <= 0 y, sin piso, T_max valdría 0 y cada decisión usaría solo 64
+simulaciones. En una mesa al día (clasificatoria) el piso no actúa: η·T_rest/D_rest
+es ~1,4 s al empezar y solo baja de 0,25 s si la mesa va muy atrasada.
 
 Dos salvaguardas que el .tex no dice y que no cambian la regla: siempre se corre
 al menos un bloque de 64 simulaciones (con T_max = 0 no habría ninguna estimación),
@@ -47,14 +52,17 @@ class ResultadoEquity:
 
 
 def t_max_de_reloj(cfg, manos_jugadas, segundos_mesa):
-    """T_max = min(T_tope, η · T_rest / D_rest) (§1.2)."""
+    """T_max = max(T_piso, min(T_tope, η · T_rest / D_rest)) (§1.2).
+
+    Con la mesa pasada de su tiempo (T_rest <= 0: la final, que dura 1 hora en una sola mesa) vale T_piso, no 0."""
+    piso = cfg.get("t_piso_s", 0.0)
     d_rest = cfg["decisiones_por_mano"] * (cfg["manos_mesa"] - manos_jugadas)
     t_rest = cfg["t_mesa"] - segundos_mesa
     if t_rest <= 0:
-        return 0.0
+        return piso
     if d_rest <= 0:
-        return cfg["t_tope"]
-    return min(cfg["t_tope"], cfg["eta"] * t_rest / d_rest)
+        return max(piso, cfg["t_tope"])
+    return max(piso, min(cfg["t_tope"], cfg["eta"] * t_rest / d_rest))
 
 
 def _preparar(mano, board, rivales):

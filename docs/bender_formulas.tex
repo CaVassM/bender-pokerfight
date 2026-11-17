@@ -141,7 +141,7 @@ $\varepsilon$ & Error máximo aceptado. \\
 \qquad\text{o si}\quad t\ge T_{\max}
 \]
 \[
-T_{\max}=\min\!\Big(T_{\text{tope}},\ \eta\cdot\frac{T_{\text{rest}}}{D_{\text{rest}}}\Big)
+T_{\max}=\max\!\Big(T_{\text{piso}},\ \min\!\Big(T_{\text{tope}},\ \eta\cdot\frac{T_{\text{rest}}}{D_{\text{rest}}}\Big)\Big)
 \qquad
 D_{\text{rest}}=2{,}5\cdot(50-\text{manos jugadas en la mesa})
 \]
@@ -152,11 +152,12 @@ $e_{\text{ref}}$ & El umbral que importa para esta decisión, el más cercano a 
 $k$ & Cuántos $\sigma_e$ de distancia al umbral bastan para que más simulaciones no cambien la decisión: 3. \\
 $t$ & Tiempo ya usado en esta decisión, revisado cada 64 simulaciones. \\
 $T_{\text{tope}}$ & Tope absoluto por decisión: 1{,}5 s (el límite de la arena es 5 s). \\
+$T_{\text{piso}}$ & Mínimo de tiempo por decisión: 0{,}25 s (\code{reloj.t\_piso\_s}). Si $T_{\text{rest}}\le0$ (la mesa ya pasó sus 360 s), $T_{\max}=T_{\text{piso}}$, no 0. \\
 $T_{\text{rest}}$ & Segundos que le quedan a la mesa: $360$ menos el tiempo desde la primera mano de la mesa. \\
 $D_{\text{rest}}$ & Decisiones de Bender que faltan, estimadas con unas 2{,}5 por mano. \\
 $\eta$ & Fracción de su parte justa del reloj que Bender se permite usar: 0{,}5. \\
 \end{params}
-\uso{Cada mesa se corta a los 6 minutos aunque no lleguen a 50 manos. Con unos 7 s por mano para toda la mesa, Bender no puede gastar 2 s fijos por decisión. Medido con el evaluador en C (\code{phevaluator}): mediana de 5 ms y p95 de 17 ms por decisión; el tope casi nunca actúa.}
+\uso{Cada mesa se corta a los 6 minutos aunque no lleguen a 50 manos. Con unos 7 s por mano para toda la mesa, Bender no puede gastar 2 s fijos por decisión. Medido con el evaluador en C (\code{phevaluator}): mediana de 5 ms y p95 de 17 ms por decisión; el tope casi nunca actúa. \textbf{Por qué el piso:} la final es una sola mesa que dura hasta 1 hora. Sin piso, pasados los 360 s $T_{\text{rest}}\le0$ daba $T_{\max}=0$ y cada decisión se quedaba con el único bloque de 64 simulaciones ($\sigma_e\approx6$ puntos de equity en vez de menos de 1). Con 0{,}25 s siguen saliendo $N\ge2000$ (una decisión normal tarda unos 10 ms); en una mesa de la clasificatoria que va al día el piso no actúa, porque $\eta\,T_{\text{rest}}/D_{\text{rest}}$ ronda 1{,}4 s.}
 \end{formbox}
 
 \subsection{Equity contra un rango}
@@ -623,7 +624,7 @@ $\tau$ & Umbral de certeza: 0{,}7. \emph{Provisional}. \\
 \begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{3.6cm}>{\centering\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}X@{}}
 \toprule
 {\labelfont Parámetro} & {\labelfont Valor inicial} & {\labelfont Dónde se usa}\\ \midrule
-Reloj adaptativo & $N_{\min}$ 2000 / $\varepsilon_{\text{obj}}$ 0{,}005 / $k$ 3 / tope 1{,}5 s / $\eta$ 0{,}5 & Monte Carlo (§1.2) \\
+Reloj adaptativo & $N_{\min}$ 2000 / $\varepsilon_{\text{obj}}$ 0{,}005 / $k$ 3 / tope 1{,}5 s / piso 0{,}25 s / $\eta$ 0{,}5 & Monte Carlo (§1.2) \\
 Umbrales de modo & 15 / 25 bb & Modo de juego (§1.4) \\
 Tamaño de apertura & 2{,}5 bb & Preflop (§1.5) \\
 Iso-raise por limper $\iota$ & 1{,}0 bb (regla encendida por defecto desde \code{v1.3-limpers}: \code{limpers\_menu}) & Preflop con limpers (§1.5) \\

@@ -19,6 +19,7 @@ PARAMS = {
         "eps_obj": 0.005,        # ε_obj: precisión suficiente (0,5 puntos de equity)
         "k": 3.0,                # k: σ_e de distancia al umbral que bastan para parar
         "t_tope": 1.5,           # T_tope: tope absoluto por decisión, en segundos
+        "t_piso_s": 0.25,        # T_piso: mínimo de tiempo por decisión (v1.4.1): sin él, pasados los 360 s T_max = 0 (la final dura 1 h en una mesa)
         "eta": 0.5,              # η: fracción de su parte justa del reloj de la mesa
         "t_mesa": 360.0,         # segundos que dura una mesa (6 min)
         "manos_mesa": 50,        # manos por mesa
