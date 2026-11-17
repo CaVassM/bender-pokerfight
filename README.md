@@ -1,7 +1,7 @@
-# Bender · bot de PokerFight (v1.4-final)
+# Bender · bot de PokerFight (v1.4.1-final)
 
-Bot de Texas Hold'em sin límite, 100 % probabilístico: toda decisión sale de probabilidades (equity simulada contra rangos, tablas de
-apertura y Bayes) y una fórmula de utilidad; no usa LLM ni servicios externos. Responde en < 2 s (tope de 1,5 s por decisión; mediana ≈ 13 ms) y nunca envía una acción
+Bot de Texas Hold'em sin límite, 100 % probabilístico: toda decisión sale de probabilidades: equity simulada contra rangos, tablas de
+apertura y Bayes, y una fórmula de utilidad; no usa LLM ni servicios externos. Responde en < 2 s (tope de 1,5 s por decisión; mediana ≈ 13 ms) y nunca envía una acción
 fuera de `acciones_validas`.
 
 ## Cómo se corre
@@ -17,17 +17,17 @@ bender/.venv/Scripts/python bender/main.py -addr localhost:9000 -token <token>
 `-addr` es `host:puerto` de la mesa. El token va en `-token` o en la variable de entorno `BENDER_TOKEN`; nunca está en el código.
 `-params archivo.json` sobreescribe cualquier número de `params.py`; `-log` y `-silencioso` controlan el registro JSONL por decisión.
 
-**Comando del día del torneo y del servidor de pruebas** (desde la raíz del kit; el token sale de `BENDER_TOKEN`, la dirección es el único
-argumento que cambia, y el log queda activado; el token nunca se escribe en el log):
+**Comando del día del torneo y del servidor de pruebas** (desde la raíz del kit; el token sale de `BENDER_TOKEN`, la dirección anunciada es el único
+argumento que cambia, `params_servidor.json` sube los reintentos de conexión a 6 h y el log queda activado; el token nunca se escribe en el log):
 
 ```
 # Windows (PowerShell)
 $env:BENDER_TOKEN = "<token del equipo>"
-bender\.venv\Scripts\python bender\main.py -addr <host>:<puerto> -log bender\logs\torneo.jsonl
+bender\.venv\Scripts\python bender\main.py -addr <dirección anunciada> -params bender\params_servidor.json -log bender\logs\torneo.jsonl
 
 # Linux / Mac
 export BENDER_TOKEN="<token del equipo>"
-bender/.venv/bin/python bender/main.py -addr <host>:<puerto> -log bender/logs/torneo.jsonl
+bender/.venv/bin/python bender/main.py -addr <dirección anunciada> -params bender/params_servidor.json -log bender/logs/torneo.jsonl
 ```
 
 Si falta el token termina con `bender: falta el token`; si la conexión se cae, reconecta solo con el mismo token. Un solo proceso por equipo.
@@ -42,7 +42,7 @@ Si falta el token termina con `bender: falta el token`; si la conexión se cae, 
 - **Capa 2 · Lectura de rivales** (memoria por ID, aprende de todas las manos). Frecuencias con prior **Beta** y olvido (VPIP, PFR, cuánto
   sigue ante apuesta chica o grande); creencia **bayesiana** sobre el tipo de rival (nit, TAG, station, maníaco, aleatorio); **huella** de los
   montos para reconocer bots copiados del kit; y **explotación** acotada (ajusta rangos y umbrales según lo leído, con un tope de confianza).
-- **Capa 3 · RL.** PPO se evaluó en el diseño y se descartó antes de implementarlo; se probaron un **bandido online** (UCB con descuento y Exp3,
+- **Capa 3 · RL.** PPO (aprendizaje con estados sobre la mano) **no se implementó**: el equipo lo descartó para el torneo. Sí se probaron un **bandido online** (UCB con descuento y Exp3,
   con respaldo jerárquico por rival → tipo → global, recompensa Δ ln(S + K)) y una **búsqueda offline** por *successive halving* sobre
   los parámetros. El bandido no
   ganó a los parámetros fijos (la recompensa por mano es demasiado ruidosa para distinguir brazos; ver `docs/bender_formulas_rl.tex`) y queda
@@ -62,5 +62,7 @@ para no sobreajustar a los bots del kit) y la confirmación con los bots de **re
 | Confirmación con darwin y novato | 62,7 % | 58,0 % | +4,7 (−2,3 a +11,7) |
 
 K = 6000 no es significativamente peor en ningún campo y gana en promedio; con 300 semillas cada IC mide unos ±7 pts, así que la ganancia es
-probable pero no demostrada. Se verifica con `bender/.venv/Scripts/python -m pytest bender` (240 tests). Detalle: `docs/bender_formulas.tex`
+probable pero no demostrada. Se verifica con `bender/.venv/Scripts/python -m pytest bender` (243 tests). Detalle: `docs/bender_formulas.tex`
 (fórmulas, fuente de verdad), `docs/DESVIACIONES.md` (dónde `params.py` difiere de la hoja) y `PENDIENTES.md`.
+
+**Final.** Simulada con 400 finales (mesa de 6, 10 000 fichas, tope de 400 manos) contra 5 finalistas fuertes (copias de Bender, novato, darwin y bandido): P(ganar) 28 % (azar 16,7 %); la misma configuración es la mejor para clasificar y para la final (K = 20 000, K = 40 000, EV puro y el bandido online no le ganan en P(ganar) y pierden en top 2, top 3 y puesto medio). El reloj tiene un piso de 0,25 s por decisión (`reloj.t_piso_s`) para que la equity no se degrade en una mesa que dura 1 hora.
