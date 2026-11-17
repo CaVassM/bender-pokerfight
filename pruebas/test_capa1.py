@@ -391,9 +391,10 @@ def test_utilidad_apagada_no_cambia_las_decisiones_y_con_K_enorme_tampoco():
 
 
 def test_valores_por_defecto_de_v1_1_riesgo():
-    """Aprobado por el usuario (2026-11-12): utilidad ON, K = 10 000, calibración de los all-in OFF."""
+    """Aprobado por el usuario: utilidad ON (2026-11-12), calibración de los all-in OFF; K = 6 000 desde v1.4-final (2026-11-17, prueba f2;
+    antes 10 000)."""
     p = params()
-    assert p["riesgo"]["utilidad"] is True and p["riesgo"]["K"] == 10_000
+    assert p["riesgo"]["utilidad"] is True and p["riesgo"]["K"] == 6_000
     assert p["calibracion_allin"]["activa"] is False
 
 
