@@ -101,7 +101,7 @@ El valor de un brazo es un promedio con descuento que se actualiza sin guardar l
 n_a\leftarrow\gamma\,n_a+1,\qquad Q_a\leftarrow Q_a+\frac{1}{n_a}\bigl(z-Q_a\bigr)
 \]
 Es la actualización de Q-learning $Q(a)\leftarrow Q(a)+\alpha\,(z-Q(a))$ en un problema \emph{sin estados} (un solo estado, sin transición, factor de descuento de retorno $0$) con paso $\alpha=1/n_a$. Con $\gamma=1$ es el promedio muestral; con $\gamma<1$ olvida: pesa unas $1/(1-\gamma)$ manos.
-\uso{Es lo que implementa \code{bandido.py}: no hay estados de mesa ni función de valor sobre manos. Un Q-learning \emph{con} estados (PPO sobre la mano) quedó descartado por el equipo para el torneo, así que esta hoja no lo cubre. El mismo promedio se lleva en tres niveles (rival, tipo, global) y se mezcla con el shrinkage de abajo.}
+\uso{Es lo que implementa \code{bandido.py}: no hay estados de mesa ni función de valor sobre manos. Un RL \emph{con} estados (Q-learning o PPO sobre cada situación de la mano) quedó descartado por el equipo para el torneo, así que esta hoja no lo cubre. El mismo promedio se lleva en tres niveles (rival, tipo, global) y se mezcla con el shrinkage de abajo.}
 \end{formbox}
 
 \section{Valor jerárquico (shrinkage)}
@@ -124,6 +124,11 @@ Valor del brazo en una mano con rivales $R_h$: $\;\bar Q_a=\dfrac{1}{|R_h|}\sum_
 a^\star=\arg\max_a\ \Bigl[\bar Q_a+c\,\sqrt{\frac{\ln\max(2,N)}{n^{\text{global}}_a}}\Bigr],\qquad N=\sum_a n^{\text{global}}_a
 \]
 Primero se prueba cada brazo una vez (el brazo inicial primero, luego en orden). $c=1$ en unidades de $\hat\sigma$.
+\begin{params}
+$\bar Q_a$ & Valor estimado del brazo (jerárquico, promedio sobre los rivales de la mano). Es la parte que \textbf{explota}. \\
+$c\sqrt{\ln N/n_a}$ & Bono de \textbf{exploración}: grande si el brazo se probó poco ($n_a$ chico) y crece despacio con el total de pruebas $N$. Es la versión matemática de la función de exploración $f(u,n)$ del curso. \\
+$c$ & Cuánto pesa explorar. En el UCB1 clásico, con recompensas en $[0,1]$, es $c=\sqrt2$; aquí $c=1$ porque $z$ ya está normalizada por $\hat\sigma$. \\
+\end{params}
 \end{formbox}
 
 \begin{formbox}{Exp3 con piso del 2\,\%}
@@ -133,9 +138,9 @@ Cada paso actualiza \emph{todos} los brazos con el estimador ponderado de Exp3: 
 \]
 La ganancia acumulada estimada es $L_a=N_{\text{pasos}}\,\bar Q_a$ (con $\bar Q$ jerárquico) y la probabilidad de jugar $a$:
 \[
-w_a\propto e^{\eta L_a},\quad p_a=p_{\min}+(1-K p_{\min})\frac{w_a}{\sum_b w_b},\qquad \eta=\sqrt{\frac{2\ln K}{K\,T}},\ \ T=\min\!\Bigl(1000,\tfrac{1}{1-\gamma}\Bigr),\ \ p_{\min}=0{,}02
+w_a\propto e^{\eta L_a},\quad p_a=p_{\min}+(1-|\mathcal A|\,p_{\min})\frac{w_a}{\sum_b w_b},\qquad \eta=\sqrt{\frac{2\ln |\mathcal A|}{|\mathcal A|\,T}},\ \ T=\min\!\Bigl(1000,\tfrac{1}{1-\gamma}\Bigr),\ \ p_{\min}=0{,}02
 \]
-\uso{$K$ es el número de brazos aquí. Con las diferencias de valor que se esperan, $p$ queda cerca de uniforme: Exp3 mezcla los brazos y casi no apuesta a uno solo.}
+\uso{$|\mathcal A|$ es el número de brazos (3); no confundir con el colchón $K$ de la utilidad. Dividir por $p_t$ (\emph{importance weighting}) compensa que un brazo poco jugado se observe pocas veces: en promedio, $\hat g_a$ estima bien la ganancia de \emph{todos} los brazos aunque solo se vea la del jugado. Con las diferencias de valor que se esperan, $p$ queda cerca de uniforme: Exp3 mezcla los brazos y casi no apuesta a uno solo.}
 \end{formbox}
 
 \begin{formbox}{Sin explorar contra bots del kit reconocidos}
@@ -156,7 +161,7 @@ $\sigma_0,\ n_0$ & 0,03 y 20: escala previa de $r$ y su peso, solo para arrancar
 \end{params}
 
 \begin{notebox}\small
-\textbf{Qué no cambia un brazo.} La fuerza del prior Beta $s_{\text{prior}}$ de la Capa 2 (se fija al crear al rival y el halving midió un efecto nulo, $t=+0{,}63$). $\lambda$ sí cambia: se aplica en cada actualización de la memoria. En la arena real el ID de un rival puede cambiar entre enfrentamientos; entonces el valor por rival casi no se acumula y mandan el tipo y el global: es la razón del shrinkage.
+\textbf{Qué no cambia un brazo.} La fuerza del prior Beta $s_{\text{prior}}$ de la Capa 2 (se fija al crear al rival y el halving midió un efecto nulo, $t=+0{,}63$). $\lambda$ sí cambia: se aplica en cada actualización de la memoria. En la arena local de pruebas (\emph{round-robin}) cada enfrentamiento recibe un ID nuevo; en el torneo real el alias de cada rival es estable todo el campeonato. Aun así, cada rival comparte mesa con Bender solo una o dos rondas (unas 50--100 manos), así que el valor por rival acumula pocos datos y mandan el tipo y el global: es la razón del shrinkage.
 \end{notebox}
 
 \section{Búsqueda offline de los brazos (successive halving)}
