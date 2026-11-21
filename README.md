@@ -35,7 +35,7 @@ Bender se construyó en este orden, y cada paso dejó rastro en el repositorio:
 1. **Primero, la hoja de fórmulas.** Antes de escribir código se redactó, en LaTeX, cada fórmula con su tabla de parámetros y un ejemplo numérico:
    [`docs/bender_formulas.pdf`](docs/bender_formulas.pdf) (Parte 1: modelo probabilístico, Capas 1 y 2) y
    [`docs/bender_formulas_rl.pdf`](docs/bender_formulas_rl.pdf) (la parte de aprendizaje por refuerzo). Los `.tex` que las generan están en la misma
-   carpeta. La hoja es la fuente de verdad: [`docs/DESVIACIONES.md`](docs/DESVIACIONES.md) lista cada punto donde el código difiere de ella y por qué.
+   carpeta. Las hojas explican la matemática; los valores vigentes viven en [`params.py`](params.py) y [`docs/DESVIACIONES.md`](docs/DESVIACIONES.md) lista cada punto donde el código difiere de ellas y por qué.
 2. **Implementación por pasos y por capas**, con pruebas en cada paso: Capa 0 (conexión, reconexión y acción segura), Capa 1 (el cerebro: equity, EV,
    utilidad), Capa 2 (lectura de rivales y explotación) y Capa 3 (experimentos de RL, apagados por defecto).
 3. **Calibración** con los bots del kit: los números que la hoja traía como «provisionales» (VPIP, plantillas de apuesta por categoría de mano,
@@ -46,8 +46,7 @@ Bender se construyó en este orden, y cada paso dejó rastro en el repositorio:
 La bitácora completa —pendientes, decisiones, resultados y errores— está en [`PENDIENTES.md`](PENDIENTES.md).
 
 **Sobre el uso de IA.** Bender se desarrolló con asistencia de IA: buena parte del código, de los tests y de las herramientas de evaluación se
-escribió con Claude (Anthropic). El equipo definió el diseño y las reglas de adopción y aprobó cada cambio de parámetros por defecto; todos
-los commits del historial llevan la línea `Co-Authored-By` de Claude.
+escribió con Claude (Anthropic). El equipo definió el diseño y las reglas de adopción y aprobó cada cambio de parámetros por defecto.
 
 ## Mecánica de juego
 
@@ -74,6 +73,71 @@ Detalles que ayudan a entenderlo:
   pueden reconstruir y auditar las manos después.
 - **Seguridad.** Si faltan cartas, si hay una excepción o si la acción no está entre las válidas, juega la acción segura (pasar o retirarse) y deja la
   traza. Reconecta solo con el mismo token si se cae el socket.
+
+### Las matemáticas, con un ejemplo en cada paso
+
+Notación: **P** = pozo, **C** = lo que cuesta igualar, **A** = lo que agrega Bender al apostar, **e** = equity (probabilidad de ganar la mano; un
+empate cuenta como media victoria), **S** = fichas que le quedan a Bender.
+
+**1. Equity por Monte Carlo.** Se reparten al azar las cartas que faltan y las del rival (sacadas de su rango) y se cuenta cuántas veces gana Bender:
+
+$$e=\frac{\text{victorias}+\tfrac12\,\text{empates}}{N},\qquad \sigma_e=\sqrt{\frac{e\,(1-e)}{N}}$$
+
+Con N = 2 500 simulaciones, incluso en el peor caso (e = 0,5) el error típico es de 1 punto. Por eso Bender simula al menos 2 000 veces y para
+cuando σₑ ≤ 0,005 (medio punto) o cuando la equity ya está claramente lejos del umbral que cambiaría su decisión.
+
+**2. Igualar una apuesta.** Bender gana P + C si gana y pierde C si pierde:
+
+$$EV(\text{igualar})=e\,(P+C)-C\ \ \Longrightarrow\ \ \text{conviene si}\ \ e>\frac{C}{P+C}$$
+
+*Ejemplo:* con P = 600 y C = 300 necesita más de 300/900 = 33,3 % de equity.
+
+**3. Apostar o subir: la fold equity.** Si Bender apuesta A, con probabilidad **f** todos se retiran y se lleva el pozo; si no, juega con la equity **e′**
+que tiene contra los rivales que *pagan* (que no es la misma que contra todo su rango):
+
+$$EV(\text{apostar})=f\,P+(1-f)\,\big[\,e'\,(P+A+A')-A\,\big],\qquad f=\prod_i\,(1-c_i)$$
+
+donde A′ es lo que agrega el rival que paga y cᵢ la probabilidad de que el rival *i* siga en la mano.
+*Ejemplo:* P = 600, A = A′ = 300, f = 0,49, e′ = 0,35 → 0,49·600 + 0,51·(0,35·1 200 − 300) ≈ **+355 fichas**. Un farol puro (e′ = 0) no pierde fichas
+solo si f > A/(P + A): hace falta que se retiren el 33 % de las veces con A = P/2 y el 50 % con A = P.
+
+**4. El rango del rival cambia con cada acción (Bayes).** Cada combinación *h* de cartas del rival tiene un peso. Cuando él actúa, ese peso se multiplica por
+la probabilidad de que alguien con esa mano haga esa acción (el piso de 0,02 evita descartar una mano por completo):
+
+$$w'(h)\ \propto\ w(h)\cdot\max\big(P(a\mid h),\ 0{,}02\big)$$
+
+*Ejemplo:* en un flop J-7-2 quedan 259 combinaciones (43 fuertes, 45 medias, 171 «aire»). Si el rival paga, sus pesos pasan a 43·0,55, 45·0,60 y 171·0,07, y
+el «aire» baja del 66 % al 19 % de su rango.
+
+**5. Utilidad logarítmica: no jugarse todo a cara o cruz.** Para clasificar entre los 6 mejores, quedar eliminado cuesta mucho más de lo que una buena apuesta
+rinde. Bender elige la acción con mayor utilidad esperada, con una función cóncava de las fichas que le quedan:
+
+$$u(S)=\ln(S+K),\qquad K=6\,000\ \ (\text{el «colchón»})$$
+
+*Ejemplo:* meter todo un stack de S = 10 000 a «doble o nada» solo es aceptable si la equity cumple
+
+$$e\ \ge\ \frac{\ln\frac{S+K}{K}}{\ln\frac{2S+K}{K}}$$
+
+| K | 5 000 | 6 000 | 10 000 | 40 000 | → ∞ |
+|---|---|---|---|---|---|
+| equity mínima | 68,3 % | 66,9 % | 63,1 % | 55,0 % | 50 % (maximizar fichas) |
+
+(K = 6 000 es el valor final; su fila sale de la misma fórmula.) Cuanto más chico el colchón, más prudente.
+
+**6. Cuánto explotar a cada rival.** Bender mide estadísticas de cada rival (por ejemplo su VPIP, el % de manos en que entra al bote) con un prior que
+las acerca a lo normal al principio. Se desvía de su juego sólido solo en la medida en que la desviación del rival es *real* y no ruido:
+
+$$\rho=\rho_{\max}\cdot\max\!\Big(0,\ 1-\kappa\,\frac{\sigma}{\lvert\hat p-m\rvert}\Big),\qquad \theta=(1-\rho)\,\theta_{\text{base}}+\rho\,\hat\theta$$
+
+con p̂ el valor estimado del rival, m el valor de la población, σ la incertidumbre del estimado, ρ_max = 0,8 y κ = 1.
+*Ejemplo* (VPIP de la población m = 0,30): tras 10 manos p̂ = 0,433 y σ = 0,089 → ρ = 0,8·(1 − 0,089/0,133) ≈ **0,26**; tras 85 manos p̂ = 0,552 y
+σ = 0,048 → ρ ≈ **0,65**. Con más datos explota más; con pocos, casi no se mueve.
+
+**7. Reloj adaptativo.** Con 360 s para 50 manos y unas 2,5 decisiones de Bender por mano, cada decisión puede usar
+
+$$T_{\max}=\max\!\Big(T_{\text{piso}},\ \min\!\big(T_{\text{tope}},\ \eta\,\tfrac{T_{\text{rest}}}{D_{\text{rest}}}\big)\Big)$$
+
+*Ejemplo* al empezar una mesa: 0,5·360/125 = 1,44 s (con T_tope = 1,5 s y T_piso = 0,25 s). En la práctica casi nunca hace falta: la mediana real es de ≈ 25 ms.
 
 ## Lo interesante
 
@@ -187,9 +251,6 @@ el evaluador de manos con el del kit en Go y necesita esa carpeta. Para el simul
 | `docs/` | Hojas de fórmulas (PDF y `.tex`) y [`DESVIACIONES.md`](docs/DESVIACIONES.md) |
 | `herramientas/campeonato/` | Simulador del formato de la clasificatoria (Go) |
 | `pruebas/` | Tests, scripts de evaluación y los informes de los experimentos (`pruebas/salidas/…/informe.md`) |
-
-La hoja de fórmulas es una versión condensada: no recoge el piso del reloj (`reloj.t_piso_s`, `v1.4.1`) ni el preflop con limpers
-(`apertura.limpers_menu`, activo desde `v1.3`); esos dos están explicados en `params.py`, `DESVIACIONES.md` y `PENDIENTES.md`.
 
 ## Créditos y dependencias
 
