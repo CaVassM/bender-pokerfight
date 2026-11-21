@@ -45,8 +45,9 @@ Bender se construyó en este orden, y cada paso dejó rastro en el repositorio:
 
 La bitácora completa —pendientes, decisiones, resultados y errores— está en [`PENDIENTES.md`](PENDIENTES.md).
 
-**Sobre el uso de IA.** Bender se desarrolló con asistencia de IA: buena parte del código, de los tests y de las herramientas de evaluación se
-escribió con Claude (Anthropic). El equipo definió el diseño y las reglas de adopción y aprobó cada cambio de parámetros por defecto.
+**Decisiones.** El diseño y las reglas de adopción se fijaron antes de ver los resultados, y cada cambio de parámetros por defecto se aprobó
+de forma explícita. Lo que no pasó la regla (los experimentos de RL, la calibración opcional de los all-in, la huella corregida) quedó apagado
+y documentado, con sus números, en lugar de borrarse.
 
 ## Mecánica de juego
 
@@ -266,4 +267,3 @@ el evaluador de manos con el del kit en Go y necesita esa carpeta. Para el simul
   real, y se compila dentro de la carpeta del kit.
 - Los bots del kit (`base`, `espia`, `estadistico`, `bandido`, `conservador`, `aleatorio`, `novato`, `darwin`) se usan solo como rivales de prueba y
   no están incluidos aquí. `datos/` contiene calibraciones medidas jugando contra ellos.
-- Desarrollado con asistencia de Claude (Anthropic), como se explica arriba.
