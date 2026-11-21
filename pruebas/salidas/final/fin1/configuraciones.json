@@ -1,0 +1,85 @@
+{
+ "commit": "a1c3ac6a64bb23fc5b863d6b4eb3b9cb842adf9a",
+ "n": 400,
+ "manos": 400,
+ "semilla": 18000000,
+ "rivales": [
+  [
+   "bender_agresivo",
+   1
+  ],
+  [
+   "bender_v1",
+   1
+  ],
+  [
+   "novato",
+   1
+  ],
+  [
+   "darwin",
+   1
+  ],
+  [
+   "bandido",
+   1
+  ]
+ ],
+ "configs": {
+  "a": {
+   "nombre": "a \u00b7 v1.4-final (K = 6000)",
+   "variante": {}
+  },
+  "b": {
+   "nombre": "b \u00b7 K = 20 000",
+   "variante": {
+    "riesgo": {
+     "K": 20000
+    }
+   }
+  },
+  "c": {
+   "nombre": "c \u00b7 K = 40 000",
+   "variante": {
+    "riesgo": {
+     "K": 40000
+    }
+   }
+  },
+  "d": {
+   "nombre": "d \u00b7 utilidad apagada (EV puro)",
+   "variante": {
+    "riesgo": {
+     "utilidad": false
+    }
+   }
+  },
+  "e": {
+   "nombre": "e \u00b7 bandido UCB entre a, b y d",
+   "variante": {},
+   "bandido": {
+    "activo": true,
+    "selector": "ucb",
+    "orden": [
+     "a",
+     "b",
+     "d"
+    ],
+    "brazo_inicial": "a",
+    "brazos": {
+     "a": {},
+     "b": {
+      "riesgo": {
+       "K": 20000
+      }
+     },
+     "d": {
+      "riesgo": {
+       "utilidad": false
+      }
+     }
+    }
+   }
+  }
+ }
+}
