@@ -1,0 +1,30 @@
+{
+  "nombre": "demo-bender",
+  "formato": "round-robin",
+  "puntuacion": "neto",
+  "manos_por_enfrentamiento": 100,
+  "ida_y_vuelta": true,
+  "reponer_stack": true,
+  "semilla": 20261117,
+  "paralelismo": 4,
+  "penalizacion_timeout": 0,
+  "guardar_historial": true,
+  "salida": "bender/pruebas/salidas/demo",
+  "mesa": {
+    "ciega_chica": 50,
+    "ciega_grande": 100,
+    "stack": 10000,
+    "timeout_ms": 5000,
+    "espera_jugadores_ms": 15000
+  },
+  "participantes": [
+    { "id": "bender", "nombre": "Bender", "comando": ["bender/.venv/Scripts/python.exe", "bender/main.py", "-silencioso"] },
+    { "id": "aleatorio", "nombre": "Aleatorio", "comando": ["./bin/aleatorio"] },
+    { "id": "conservador", "nombre": "Conservador", "comando": ["./bin/conservador"] },
+    { "id": "base", "nombre": "Base", "comando": ["./bin/base"] },
+    { "id": "estadistico", "nombre": "Estadistico", "comando": ["./bin/estadistico"] },
+    { "id": "bandido", "nombre": "Bandido", "comando": ["./bin/bandido"] },
+    { "id": "espia", "nombre": "Espia", "comando": ["./bin/espia"] },
+    { "id": "darwin", "nombre": "Darwin", "comando": ["./bin/darwin"] }
+  ]
+}
