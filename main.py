@@ -27,6 +27,8 @@ def main():
     parser.add_argument("-addr", default="localhost:9000", help="dirección de la mesa (host:puerto)")
     parser.add_argument("-token", default=None, help="token de sesión (o variable BENDER_TOKEN)")
     parser.add_argument("-params", default=None, help="JSON con parámetros que sobreescriben los de params.py")
+
+    # Sin ese argumento de logs con normalidad lo guarda en bender/logs
     parser.add_argument("-log", default=None, help="ruta del JSONL de la sesión (por defecto bender/logs/)")
     parser.add_argument("-silencioso", action="store_true", help="no imprime nada en stderr")
     args = parser.parse_args()
