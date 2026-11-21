@@ -82,21 +82,27 @@ empate cuenta como media victoria), **S** = fichas que le quedan a Bender.
 
 **1. Equity por Monte Carlo.** Se reparten al azar las cartas que faltan y las del rival (sacadas de su rango) y se cuenta cuántas veces gana Bender:
 
-$$e=\frac{\text{victorias}+\tfrac12\,\text{empates}}{N},\qquad \sigma_e=\sqrt{\frac{e\,(1-e)}{N}}$$
+```math
+e=\frac{\text{victorias}+\tfrac12\,\text{empates}}{N},\qquad \sigma_e=\sqrt{\frac{e\,(1-e)}{N}}
+```
 
 Con N = 2 500 simulaciones, incluso en el peor caso (e = 0,5) el error típico es de 1 punto. Por eso Bender simula al menos 2 000 veces y para
 cuando σₑ ≤ 0,005 (medio punto) o cuando la equity ya está claramente lejos del umbral que cambiaría su decisión.
 
 **2. Igualar una apuesta.** Bender gana P + C si gana y pierde C si pierde:
 
-$$EV(\text{igualar})=e\,(P+C)-C\ \ \Longrightarrow\ \ \text{conviene si}\ \ e>\frac{C}{P+C}$$
+```math
+EV(\text{igualar})=e\,(P+C)-C\ \ \Longrightarrow\ \ \text{conviene si}\ \ e>\frac{C}{P+C}
+```
 
 *Ejemplo:* con P = 600 y C = 300 necesita más de 300/900 = 33,3 % de equity.
 
 **3. Apostar o subir: la fold equity.** Si Bender apuesta A, con probabilidad **f** todos se retiran y se lleva el pozo; si no, juega con la equity **e′**
 que tiene contra los rivales que *pagan* (que no es la misma que contra todo su rango):
 
-$$EV(\text{apostar})=f\,P+(1-f)\,\big[\,e'\,(P+A+A')-A\,\big],\qquad f=\prod_i\,(1-c_i)$$
+```math
+EV(\text{apostar})=f\,P+(1-f)\,\big[\,e'\,(P+A+A')-A\,\big],\qquad f=\prod_i\,(1-c_i)
+```
 
 donde A′ es lo que agrega el rival que paga y cᵢ la probabilidad de que el rival *i* siga en la mano.
 *Ejemplo:* P = 600, A = A′ = 300, f = 0,49, e′ = 0,35 → 0,49·600 + 0,51·(0,35·1 200 − 300) ≈ **+355 fichas**. Un farol puro (e′ = 0) no pierde fichas
@@ -105,7 +111,9 @@ solo si f > A/(P + A): hace falta que se retiren el 33 % de las veces con A = P/
 **4. El rango del rival cambia con cada acción (Bayes).** Cada combinación *h* de cartas del rival tiene un peso. Cuando él actúa, ese peso se multiplica por
 la probabilidad de que alguien con esa mano haga esa acción (el piso de 0,02 evita descartar una mano por completo):
 
-$$w'(h)\ \propto\ w(h)\cdot\max\big(P(a\mid h),\ 0{,}02\big)$$
+```math
+w'(h)\ \propto\ w(h)\cdot\max\big(P(a\mid h),\ 0{,}02\big)
+```
 
 *Ejemplo:* en un flop J-7-2 quedan 259 combinaciones (43 fuertes, 45 medias, 171 «aire»). Si el rival paga, sus pesos pasan a 43·0,55, 45·0,60 y 171·0,07, y
 el «aire» baja del 66 % al 19 % de su rango.
@@ -113,11 +121,15 @@ el «aire» baja del 66 % al 19 % de su rango.
 **5. Utilidad logarítmica: no jugarse todo a cara o cruz.** Para clasificar entre los 6 mejores, quedar eliminado cuesta mucho más de lo que una buena apuesta
 rinde. Bender elige la acción con mayor utilidad esperada, con una función cóncava de las fichas que le quedan:
 
-$$u(S)=\ln(S+K),\qquad K=6\,000\ \ (\text{el «colchón»})$$
+```math
+u(S)=\ln(S+K),\qquad K=6\,000\ \ (\text{el «colchón»})
+```
 
 *Ejemplo:* meter todo un stack de S = 10 000 a «doble o nada» solo es aceptable si la equity cumple
 
-$$e\ \ge\ \frac{\ln\frac{S+K}{K}}{\ln\frac{2S+K}{K}}$$
+```math
+e\ \ge\ \frac{\ln\frac{S+K}{K}}{\ln\frac{2S+K}{K}}
+```
 
 | K | 5 000 | 6 000 | 10 000 | 40 000 | → ∞ |
 |---|---|---|---|---|---|
@@ -128,7 +140,9 @@ $$e\ \ge\ \frac{\ln\frac{S+K}{K}}{\ln\frac{2S+K}{K}}$$
 **6. Cuánto explotar a cada rival.** Bender mide estadísticas de cada rival (por ejemplo su VPIP, el % de manos en que entra al bote) con un prior que
 las acerca a lo normal al principio. Se desvía de su juego sólido solo en la medida en que la desviación del rival es *real* y no ruido:
 
-$$\rho=\rho_{\max}\cdot\max\!\Big(0,\ 1-\kappa\,\frac{\sigma}{\lvert\hat p-m\rvert}\Big),\qquad \theta=(1-\rho)\,\theta_{\text{base}}+\rho\,\hat\theta$$
+```math
+\rho=\rho_{\max}\cdot\max\!\Big(0,\ 1-\kappa\,\frac{\sigma}{\lvert\hat p-m\rvert}\Big),\qquad \theta=(1-\rho)\,\theta_{\text{base}}+\rho\,\hat\theta
+```
 
 con p̂ el valor estimado del rival, m el valor de la población, σ la incertidumbre del estimado, ρ_max = 0,8 y κ = 1.
 *Ejemplo* (VPIP de la población m = 0,30): tras 10 manos p̂ = 0,433 y σ = 0,089 → ρ = 0,8·(1 − 0,089/0,133) ≈ **0,26**; tras 85 manos p̂ = 0,552 y
@@ -136,7 +150,9 @@ con p̂ el valor estimado del rival, m el valor de la población, σ la incertid
 
 **7. Reloj adaptativo.** Con 360 s para 50 manos y unas 2,5 decisiones de Bender por mano, cada decisión puede usar
 
-$$T_{\max}=\max\!\Big(T_{\text{piso}},\ \min\!\big(T_{\text{tope}},\ \eta\,\tfrac{T_{\text{rest}}}{D_{\text{rest}}}\big)\Big)$$
+```math
+T_{\max}=\max\!\Big(T_{\text{piso}},\ \min\!\big(T_{\text{tope}},\ \eta\,\tfrac{T_{\text{rest}}}{D_{\text{rest}}}\big)\Big)
+```
 
 *Ejemplo* al empezar una mesa: 0,5·360/125 = 1,44 s (con T_tope = 1,5 s y T_piso = 0,25 s). En la práctica casi nunca hace falta: la mediana real es de ≈ 25 ms.
 
